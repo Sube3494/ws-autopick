@@ -1,0 +1,19 @@
+{
+  "name": "ws-autopick",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.2.15",
+  "scripts": {
+    "build": "bunx tsc -p tsconfig.json",
+    "dev": "bun --watch src/index.ts",
+    "start": "bun dist/index.js"
+  },
+  "dependencies": {
+    "nodemailer": "^8.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "typescript": "^5.9.3"
+  }
+}
