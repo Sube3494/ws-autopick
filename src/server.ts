@@ -719,7 +719,7 @@ function renderDashboardPage(data: DashboardData, currentUser: AuthUser, message
     async function copyText(value) {
       if (!value) return false;
 
-      if (navigator.clipboard && window.isSecureContext) {
+      if (navigator.clipboard) {
         try {
           await navigator.clipboard.writeText(value);
           return true;
@@ -728,19 +728,31 @@ function renderDashboardPage(data: DashboardData, currentUser: AuthUser, message
 
       const textarea = document.createElement('textarea');
       textarea.value = value;
-      textarea.setAttribute('readonly', 'true');
+      textarea.setAttribute('aria-hidden', 'true');
       textarea.style.position = 'fixed';
-      textarea.style.top = '-9999px';
-      textarea.style.left = '-9999px';
+      textarea.style.top = '0';
+      textarea.style.left = '0';
+      textarea.style.opacity = '0';
+      textarea.style.pointerEvents = 'none';
+
       document.body.appendChild(textarea);
-      textarea.focus();
+
+      const selection = document.getSelection();
+      const savedRange = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+
+      textarea.focus({ preventScroll: true });
       textarea.select();
+      textarea.setSelectionRange(0, textarea.value.length);
 
       try {
         return document.execCommand('copy');
       } catch {
         return false;
       } finally {
+        if (selection) {
+          selection.removeAllRanges();
+          if (savedRange) selection.addRange(savedRange);
+        }
         document.body.removeChild(textarea);
       }
     }
@@ -750,6 +762,9 @@ function renderDashboardPage(data: DashboardData, currentUser: AuthUser, message
         e.preventDefault();
         const value = button.getAttribute('data-copy') || '';
         const copied = await copyText(value);
+        if (!copied) {
+          window.prompt('复制失败，请手动复制下面的 Key', value);
+        }
         showToast(copied ? '已复制到剪贴板' : '复制失败，请手动复制');
       });
     }
