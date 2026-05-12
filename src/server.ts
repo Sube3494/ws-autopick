@@ -267,7 +267,7 @@ function renderFailedEventRows(items: FailedEventSummary[]) {
   `).join("");
 }
 
-function renderDashboardPage(data: DashboardData, currentUser: AuthUser, message?: string) {
+function renderDashboardPage(data: DashboardData, currentUser: AuthUser, message?: string, autoCopyKey?: string) {
   const cards = data.users.map((user, index) => {
     const seq = String(index + 1).padStart(2, '0');
     const wsBadge = user.wsConnected ? "在线" : "离线";
@@ -815,6 +815,13 @@ function renderDashboardPage(data: DashboardData, currentUser: AuthUser, message
       url.searchParams.delete('message');
       window.history.replaceState({}, document.title, url.pathname + url.search);
     }
+    ` : ""}
+
+    ${autoCopyKey ? `
+    window.setTimeout(async () => {
+      const copied = await copyText(${JSON.stringify(autoCopyKey)});
+      showToast(copied ? '新 Key 已自动复制到剪贴板' : '新 Key 生成成功，但自动复制失败');
+    }, 50);
     ` : ""}
 
     const themeBtn = document.getElementById('theme-btn');
@@ -1602,8 +1609,10 @@ export function createServer(runtime: PluginRuntime) {
         const action = String(body.action || "").trim();
 
         if (action === "create") {
-          await runtime.createConnection(String(body.name || body.label || ""), String(body.platform || "美团"));
-          redirect(response, "/admin?message=key-created");
+          const created = await runtime.createConnection(String(body.name || body.label || ""), String(body.platform || "美团"));
+          const data = await runtime.dashboardData();
+          response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+          response.end(renderDashboardPage(data, session.user, "新 key 已生成，正在尝试自动复制。", created?.apiKey || ""));
           return;
         }
 
