@@ -33,7 +33,7 @@
 bun install
 ```
 
-复制环境变量模板并填写 SMTP：
+复制环境变量模板并填写 `PUSH_BASE_URL` 和 SMTP：
 
 ```bash
 cp .env.example .env
@@ -56,9 +56,12 @@ bun run dev
 
 `.env` 只保留启动必需项。业务运行参数会在首次启动时写入 sqlite，后续统一在管理台中修改。
 
+`PUSH_BASE_URL` 为必填项，未配置时服务会直接启动失败，避免误连到默认 `3000` 端口。
+
 ```txt
 HOST=127.0.0.1
 PORT=22800
+PUSH_BASE_URL=http://127.0.0.1:3000
 DATA_DIR=./data
 DB_PATH=./data/ws-autopick.sqlite
 SMTP_HOST=smtp.qq.com

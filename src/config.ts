@@ -33,11 +33,19 @@ function readStatuses(value: string | undefined) {
   return items.length > 0 ? items : DEFAULT_STATUSES;
 }
 
+function readRequiredString(value: string | undefined, key: string) {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    throw new Error(`${key} is required`);
+  }
+  return normalized;
+}
+
 export function loadConfig(cwd: string): AppConfig {
   return {
     host: process.env.HOST?.trim() || "127.0.0.1",
     port: readNumber(process.env.PORT, 22800),
-    pushBaseUrl: (process.env.PUSH_BASE_URL?.trim() || "http://127.0.0.1:3000").replace(/\/+$/, ""),
+    pushBaseUrl: readRequiredString(process.env.PUSH_BASE_URL, "PUSH_BASE_URL").replace(/\/+$/, ""),
     publicBaseUrl: process.env.PUBLIC_BASE_URL?.trim()?.replace(/\/+$/, "") || undefined,
     dataDir: path.resolve(cwd, process.env.DATA_DIR?.trim() || "./data"),
     dbPath: path.resolve(cwd, process.env.DB_PATH?.trim() || "./data/ws-autopick.sqlite"),
