@@ -208,7 +208,7 @@ function parseNestedNotify(value: unknown): WsNotifyEvent | null {
 
   const body = nested as Record<string, unknown>;
   const orderId = String(body.id || "").trim();
-  const statusHint = String(body.type || "").trim().toLowerCase();
+  const statusHint = normalizeNotifyStatusHint(body.type);
   if (!orderId || !statusHint) {
     return { kind: "ignore", reason: "notify-missing-id-or-type", raw: nested };
   }
@@ -219,6 +219,13 @@ function parseNestedNotify(value: unknown): WsNotifyEvent | null {
     statusHint,
     raw: nested,
   };
+}
+
+function normalizeNotifyStatusHint(value: unknown) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return "";
+  if (raw === "rollback") return "delete";
+  return raw;
 }
 
 function parseProgressText(text: string): WsNotifyEvent | null {

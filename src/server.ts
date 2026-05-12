@@ -1760,6 +1760,51 @@ export function createServer(runtime: PluginRuntime) {
         return;
       }
 
+      if (url.pathname === "/self-delivery" && method === "POST") {
+        const apiKey = readApiKey(request.headers);
+        if (!runtime.isAuthorized(apiKey)) {
+          response.writeHead(401, { "Content-Type": "application/json" });
+          response.end(JSON.stringify({ ok: false, error: "Unauthorized" }));
+          return;
+        }
+
+        const rawBody = await readRequestBody(request);
+        let body: Record<string, unknown>;
+        try {
+          body = rawBody ? JSON.parse(rawBody) as Record<string, unknown> : {};
+        } catch {
+          response.writeHead(400, { "Content-Type": "application/json" });
+          response.end(JSON.stringify({ ok: false, error: "Invalid JSON body" }));
+          return;
+        }
+
+        const sourceId = String(body.sourceId || "").trim();
+        const logisticId = String(body.logisticId || "").trim();
+        const orderNo = String(body.orderNo || "").trim();
+        const platform = String(body.platform || "").trim();
+        const dailyPlatformSequence = Number(body.dailyPlatformSequence || 0);
+
+        if (!sourceId || !logisticId || !orderNo || !platform || !Number.isFinite(dailyPlatformSequence) || dailyPlatformSequence <= 0) {
+          response.writeHead(400, { "Content-Type": "application/json" });
+          response.end(JSON.stringify({
+            ok: false,
+            error: "platform, dailyPlatformSequence, orderNo, sourceId and logisticId are required",
+          }));
+          return;
+        }
+
+        const payload = await runtime.selfDelivery(apiKey || "", {
+          platform,
+          dailyPlatformSequence,
+          orderNo,
+          sourceId,
+          logisticId,
+        });
+        response.writeHead(payload.ok ? 200 : 409, { "Content-Type": "application/json" });
+        response.end(JSON.stringify(payload));
+        return;
+      }
+
       response.writeHead(404, { "Content-Type": "application/json" });
       response.end(JSON.stringify({ ok: false, error: "Not found" }));
     } catch (error) {

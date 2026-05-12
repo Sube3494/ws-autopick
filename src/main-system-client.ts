@@ -17,6 +17,7 @@ export class MainSystemClient {
     return this.request("DELETE", "/api/v1/api-key/listened-orders", event.apiKey, {
       platform: event.platform,
       orderNo: event.orderNo,
+      sourceId: "sourceId" in event ? event.sourceId : undefined,
     });
   }
 

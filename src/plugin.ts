@@ -5,7 +5,7 @@ import { logger } from "./logger.js";
 import { sendVerificationCode } from "./mailer.js";
 import { MaiyatianClient } from "./maiyatian.js";
 import { MainSystemClient } from "./main-system-client.js";
-import { AppConfig, AuthUser, ConnectionUpdateInput, DashboardData, FailedEventFilters, FailedEventSummary, RuntimeSettings } from "./types.js";
+import { AppConfig, AuthUser, ConnectionUpdateInput, DashboardData, FailedEventFilters, FailedEventSummary, RuntimeSettings, SelfDeliveryCommand } from "./types.js";
 import { UserRunner } from "./user-runner.js";
 
 export class PluginRuntime {
@@ -220,6 +220,12 @@ export class PluginRuntime {
     const connection = this.requireConnectionByApiKey(apiKey);
     const client = new MaiyatianClient(this.config, connection);
     return client.fetchOrdersByDate(date);
+  }
+
+  async selfDelivery(apiKey: string, command: SelfDeliveryCommand) {
+    const connection = this.requireConnectionByApiKey(apiKey);
+    const client = new MaiyatianClient(this.config, connection);
+    return client.submitSelfDelivery(command);
   }
 
   async deleteConnection(id: number) {

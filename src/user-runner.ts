@@ -133,6 +133,7 @@ export class UserRunner {
         eventId: `${this.user.label}:${orderId}:delete`,
         platform: cached.platform,
         orderNo: cached.orderNo,
+        sourceId: orderId,
         rawPayload: {
           id: orderId,
           source: "ws-cache",
@@ -140,8 +141,8 @@ export class UserRunner {
       };
     }
 
-    const fetched = await this.source.buildEventFromOrderId(orderId, "delete");
-    if (fetched.kind === "upsert") {
+    const fetched = await this.source.buildEventFromOrderId(orderId, "delete").catch(() => null);
+    if (fetched?.kind === "upsert") {
       return {
         kind: "delete",
         sourceLabel: fetched.sourceLabel,
@@ -149,10 +150,31 @@ export class UserRunner {
         eventId: `${this.user.label}:${orderId}:delete`,
         platform: fetched.platform,
         orderNo: fetched.orderNo,
+        sourceId: orderId,
         rawPayload: fetched.rawPayload,
       };
     }
-    return fetched;
+
+    if (fetched?.kind === "delete") {
+      return {
+        ...fetched,
+        sourceId: orderId,
+      };
+    }
+
+    return {
+      kind: "delete",
+      sourceLabel: this.user.label,
+      apiKey: this.user.apiKey,
+      eventId: `${this.user.label}:${orderId}:delete`,
+      platform: this.user.platform,
+      orderNo: orderId,
+      sourceId: orderId,
+      rawPayload: {
+        id: orderId,
+        source: "ws-delete-fallback",
+      },
+    };
   }
 
   private buildProgressEvent(platformLabel: string, orderLabel: string, rawPayload: unknown): DeliveryEvent | null {

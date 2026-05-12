@@ -68,6 +68,7 @@ export type DeliveryEvent =
       eventId: string;
       platform: string;
       orderNo: string;
+      sourceId?: string;
       rawPayload: unknown;
     }
   | {
@@ -254,6 +255,14 @@ export type FailedEventFilters = {
 export type MaiyatianSessionIdentity = {
   merchantId: string;
   accountId: string;
+};
+
+export type SelfDeliveryCommand = {
+  platform: string;
+  dailyPlatformSequence: number;
+  orderNo: string;
+  sourceId: string;
+  logisticId: string;
 };
 
 export type AdminUserSummary = {

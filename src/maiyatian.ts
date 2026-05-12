@@ -1,7 +1,8 @@
-import { AppConfig, DeliveryEvent, MainSystemOrderPayload, MaiyatianOrderDetail, MaiyatianOrderSummary, MaiyatianSessionIdentity, UserConfig } from "./types.js";
+import { AppConfig, DeliveryEvent, MainSystemOrderPayload, MaiyatianOrderDetail, MaiyatianOrderSummary, MaiyatianSessionIdentity, SelfDeliveryCommand, UserConfig } from "./types.js";
 
 const BASE_URL = "https://saas.maiyatian.com";
 const WS_URL = "wss://msg.maiyatian.com/acc";
+const SELF_DELIVERY_SUBMIT_URL = "/delivery/submit/?f=json";
 
 type MaiyatianQueryListResponse = {
   data?: MaiyatianOrderDetail[];
@@ -97,8 +98,11 @@ export class MaiyatianClient {
       }
 
       for (const row of rows) {
-        const platform = inferPlatform(row, this.user.platform);
-        results.push(toMainSystemPayload(row, platform));
+        const orderId = String(row.id || "").trim();
+        if (!orderId) continue;
+        const detail = await this.fetchOrderDetail(orderId);
+        const platform = inferPlatform(detail, this.user.platform);
+        results.push(toMainSystemPayload(detail, platform));
       }
 
       if (rows.length < 20) {
@@ -134,6 +138,59 @@ export class MaiyatianClient {
   async buildEventFromOrderId(orderId: string, statusHint = "") {
     const detail = await this.fetchOrderDetail(orderId);
     return this.toEvent(detail, statusHint);
+  }
+
+  async submitSelfDelivery(command: SelfDeliveryCommand) {
+    const detailId = String(command.sourceId || "").trim();
+    const logisticId = String(command.logisticId || "").trim();
+    if (!detailId || !logisticId) {
+      throw new Error("sourceId and logisticId are required");
+    }
+
+    const body = new URLSearchParams({
+      id: detailId,
+      dispatcherId: "0",
+      logisticId,
+      logisticTag: "oneself",
+      tip: "0",
+      weight: "0",
+      remark: "",
+      amount: "0",
+      deliveryTime: "0",
+      direct: "0",
+      insure: "0",
+      special: "0",
+      priority: "0",
+      car: "0",
+      traffic: "0",
+      trafficWay: "",
+      cake: "0",
+      mealType: "0",
+      fromDoor: "0",
+      toDoor: "0",
+      doorService: "0",
+    }).toString();
+
+    const response = await this.postForm(SELF_DELIVERY_SUBMIT_URL, body);
+    const text = await response.text();
+    let parsed: Record<string, unknown> | null = null;
+    try {
+      parsed = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      parsed = null;
+    }
+
+    return {
+      ok: response.ok && Number(parsed?.errno || 0) === 1,
+      status: response.status,
+      parsed,
+      text,
+      submitParams: {
+        id: detailId,
+        logisticId,
+        logisticTag: "oneself",
+      },
+    };
   }
 
   async collectEvents() {
@@ -257,6 +314,28 @@ export class MaiyatianClient {
         throw new Error(`Maiyatian html request failed with ${response.status} for ${pathname}`);
       }
       return await response.text();
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  private async postForm(pathname: string, body: string) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.config.httpTimeoutMs);
+    try {
+      const response = await fetch(new URL(pathname, BASE_URL), {
+        method: "POST",
+        headers: {
+          Accept: "application/json, text/javascript, */*; q=0.01",
+          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+          "X-Requested-With": "XMLHttpRequest",
+          Cookie: String(this.user.cookie || ""),
+        },
+        body,
+        signal: controller.signal,
+      });
+
+      return response;
     } finally {
       clearTimeout(timeout);
     }
