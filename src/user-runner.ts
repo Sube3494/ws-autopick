@@ -10,7 +10,15 @@ export class UserRunner {
   private readonly source: MaiyatianClient;
   private readonly dedupe: DedupeStore;
   private readonly ws: MaiyatianWsClient;
-  private readonly orderIdentityByOrderId = new Map<string, { platform: string; orderNo: string }>();
+  private readonly mealCompleteTimers = new Map<string, NodeJS.Timeout>();
+  private readonly startupBackfillStatuses = ["confirm", "subscribe", "meal"];
+  private readonly orderIdentityByOrderId = new Map<string, {
+    platform: string;
+    orderNo: string;
+    sourceId?: string;
+    dailyPlatformSequence?: number;
+    logisticId?: string;
+  }>();
   private wsConnected = false;
   private lastWsMessageAt?: string;
   private lastSuccessPushAt?: string;
@@ -63,10 +71,15 @@ export class UserRunner {
     }
 
     this.ws.start();
+    void this.backfillUnpickedOrders();
   }
 
   stop() {
     this.ws.stop();
+    for (const timer of this.mealCompleteTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.mealCompleteTimers.clear();
   }
 
   snapshot(failedEventCount: number): UserRuntimeSnapshot {
@@ -103,6 +116,9 @@ export class UserRunner {
       this.orderIdentityByOrderId.set(event.payload.id, {
         platform: event.platform,
         orderNo: event.orderNo,
+        sourceId: event.payload.sourceId || event.payload.id,
+        dailyPlatformSequence: event.payload.dailyPlatformSequence,
+        logisticId: event.payload.logisticId,
       });
     }
 
@@ -111,6 +127,9 @@ export class UserRunner {
       this.onDelivered?.(event.apiKey);
       this.dedupe.remember(dedupeKey);
       this.lastSuccessPushAt = new Date().toISOString();
+      if (event.kind === "upsert") {
+        this.scheduleMealCompleteIfNeeded(event);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "delivery failed";
       await this.failedStore.add(event, message);
@@ -133,7 +152,9 @@ export class UserRunner {
         eventId: `${this.user.label}:${orderId}:delete`,
         platform: cached.platform,
         orderNo: cached.orderNo,
-        sourceId: orderId,
+        sourceId: cached.sourceId || orderId,
+        dailyPlatformSequence: cached.dailyPlatformSequence,
+        logisticId: cached.logisticId,
         rawPayload: {
           id: orderId,
           source: "ws-cache",
@@ -151,6 +172,8 @@ export class UserRunner {
         platform: fetched.platform,
         orderNo: fetched.orderNo,
         sourceId: orderId,
+        dailyPlatformSequence: fetched.payload.dailyPlatformSequence,
+        logisticId: fetched.payload.logisticId,
         rawPayload: fetched.rawPayload,
       };
     }
@@ -197,6 +220,122 @@ export class UserRunner {
     }
     return null;
   }
+
+  private scheduleMealCompleteIfNeeded(event: Extract<DeliveryEvent, { kind: "upsert" }>) {
+    if (isAlreadyPickedLikeStatus(event.payload.status)) {
+      return;
+    }
+
+    const sourceId = String(event.payload.sourceId || event.payload.id || "").trim();
+    if (!sourceId) {
+      return;
+    }
+
+    const scheduleKey = `${event.sourceLabel}:${sourceId}`;
+    if (this.mealCompleteTimers.has(scheduleKey)) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      void this.runScheduledMealComplete(scheduleKey, event, sourceId);
+    }, 60_000);
+    this.mealCompleteTimers.set(scheduleKey, timer);
+  }
+
+  private async runScheduledMealComplete(
+    scheduleKey: string,
+    event: Extract<DeliveryEvent, { kind: "upsert" }>,
+    sourceId: string,
+  ) {
+    this.mealCompleteTimers.delete(scheduleKey);
+
+    try {
+      const result = await this.source.submitMealComplete({
+        platform: event.platform,
+        dailyPlatformSequence: event.payload.dailyPlatformSequence || 0,
+        orderNo: event.orderNo,
+        sourceId,
+      });
+
+      if (!result.ok) {
+        logger.warn("scheduled meal-complete failed", {
+          label: this.user.label,
+          orderNo: event.orderNo,
+          status: result.status,
+          text: String(result.text || "").slice(0, 200),
+        });
+        return;
+      }
+
+      logger.info("scheduled meal-complete succeeded", {
+        label: this.user.label,
+        orderNo: event.orderNo,
+      });
+
+      await this.process({
+        kind: "progress",
+        sourceLabel: this.user.label,
+        apiKey: this.user.apiKey,
+        eventId: `${this.user.label}:${sourceId}:progress:mealComplete`,
+        platform: event.platform,
+        orderNo: event.orderNo,
+        progress: {
+          pickCompleted: true,
+        },
+        rawPayload: result,
+      });
+
+      const refreshed = await this.source.buildEventFromOrderId(sourceId, "meal").catch(() => null);
+      if (refreshed?.kind === "upsert") {
+        await this.process(refreshed);
+      }
+    } catch (error) {
+      logger.warn("scheduled meal-complete crashed", {
+        label: this.user.label,
+        orderNo: event.orderNo,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private async backfillUnpickedOrders() {
+    for (const status of this.startupBackfillStatuses) {
+      try {
+        const orders = await this.source.fetchOrdersByStatus(status);
+        for (const payload of orders) {
+          const sourceId = String(payload.sourceId || payload.id || "").trim();
+          if (!sourceId || isAlreadyPickedLikeStatus(payload.status)) {
+            continue;
+          }
+
+          this.orderIdentityByOrderId.set(String(payload.id || sourceId), {
+            platform: String(payload.platform || "").trim() || this.user.platform,
+            orderNo: String(payload.orderNo || "").trim(),
+            sourceId,
+            dailyPlatformSequence: payload.dailyPlatformSequence,
+            logisticId: payload.logisticId,
+          });
+
+          this.scheduleMealCompleteIfNeeded({
+            kind: "upsert",
+            sourceLabel: this.user.label,
+            apiKey: this.user.apiKey,
+            eventId: `${this.user.label}:${sourceId}:startup-backfill:${status}`,
+            platform: String(payload.platform || "").trim() || this.user.platform,
+            orderNo: String(payload.orderNo || "").trim(),
+            payload,
+            rawPayload: payload,
+          });
+        }
+      } catch (error) {
+        logger.warn("startup unpicked-order backfill failed", {
+          label: this.user.label,
+          status,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
 }
 
 function normalizePlatformLabel(platform: string) {
@@ -209,4 +348,9 @@ function normalizePlatformLabel(platform: string) {
 function matchOrderLabel(orderNo: string, orderLabel: string) {
   const normalized = String(orderNo || "").trim();
   return normalized.endsWith(orderLabel);
+}
+
+function isAlreadyPickedLikeStatus(status?: string) {
+  const text = String(status || "").trim();
+  return /已拣货|拣货中|已完成|取消|删除|配送中/.test(text);
 }

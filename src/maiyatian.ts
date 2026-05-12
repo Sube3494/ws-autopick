@@ -1,8 +1,9 @@
-import { AppConfig, DeliveryEvent, MainSystemOrderPayload, MaiyatianOrderDetail, MaiyatianOrderSummary, MaiyatianSessionIdentity, SelfDeliveryCommand, UserConfig } from "./types.js";
+import { AppConfig, DeliveryEvent, MainSystemOrderPayload, MaiyatianOrderDetail, MaiyatianOrderSummary, MaiyatianSessionIdentity, MealCompleteCommand, PickupCompleteCommand, SelfDeliveryCommand, UserConfig } from "./types.js";
 
 const BASE_URL = "https://saas.maiyatian.com";
 const WS_URL = "wss://msg.maiyatian.com/acc";
 const SELF_DELIVERY_SUBMIT_URL = "/delivery/submit/?f=json";
+const MEAL_COMPLETE_URL = "/order/mealComplete/?f=json";
 
 type MaiyatianQueryListResponse = {
   data?: MaiyatianOrderDetail[];
@@ -54,7 +55,7 @@ export class MaiyatianClient {
       const orderId = String(summary.id || "").trim();
       if (!orderId) continue;
       const detail = await this.fetchOrderDetail(orderId);
-      const platform = inferPlatform(detail, this.user.platform);
+      const platform = inferPlatform(detail, inferPlatform(summary, this.user.platform));
       results.push(toMainSystemPayload(detail, platform));
     }
 
@@ -101,7 +102,7 @@ export class MaiyatianClient {
         const orderId = String(row.id || "").trim();
         if (!orderId) continue;
         const detail = await this.fetchOrderDetail(orderId);
-        const platform = inferPlatform(detail, this.user.platform);
+        const platform = inferPlatform(detail, inferPlatform(row, this.user.platform));
         results.push(toMainSystemPayload(detail, platform));
       }
 
@@ -189,6 +190,68 @@ export class MaiyatianClient {
         id: detailId,
         logisticId,
         logisticTag: "oneself",
+      },
+    };
+  }
+
+  async submitPickupComplete(command: PickupCompleteCommand) {
+    const detailId = String(command.sourceId || "").trim();
+    if (!detailId) {
+      throw new Error("sourceId is required");
+    }
+
+    const body = new URLSearchParams({
+      id: detailId,
+      logisticTag: "picker",
+    }).toString();
+
+    const response = await this.postForm(SELF_DELIVERY_SUBMIT_URL, body);
+    const text = await response.text();
+    let parsed: Record<string, unknown> | null = null;
+    try {
+      parsed = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      parsed = null;
+    }
+
+    return {
+      ok: response.ok && Number(parsed?.errno || 0) === 1,
+      status: response.status,
+      parsed,
+      text,
+      submitParams: {
+        id: detailId,
+        logisticTag: "picker",
+      },
+    };
+  }
+
+  async submitMealComplete(command: MealCompleteCommand) {
+    const detailId = String(command.sourceId || "").trim();
+    if (!detailId) {
+      throw new Error("sourceId is required");
+    }
+
+    const body = new URLSearchParams({
+      id: detailId,
+    }).toString();
+
+    const response = await this.postForm(MEAL_COMPLETE_URL, body);
+    const text = await response.text();
+    let parsed: Record<string, unknown> | null = null;
+    try {
+      parsed = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      parsed = null;
+    }
+
+    return {
+      ok: response.ok && Number(parsed?.errno || 0) === 1,
+      status: response.status,
+      parsed,
+      text,
+      submitParams: {
+        id: detailId,
       },
     };
   }
@@ -350,11 +413,22 @@ function matchFirst(input: string, pattern: RegExp) {
 function toMainSystemPayload(detail: MaiyatianOrderDetail, platform: string): MainSystemOrderPayload {
   const mapAddress = String(detail.map_address || detail.address || "").trim();
   const shopName = String(detail.shop_name || detail.extend?.channel_name || "").trim();
+  const shopAddress = String(
+    detail.shop_address
+    || detail.shopAddress
+    || detail.store_address
+    || detail.storeAddress
+    || detail.merchant_address
+    || detail.merchantAddress
+    || detail.shop_name
+    || ""
+  ).trim();
   const delivery = detail.delivery && typeof detail.delivery === "object" ? detail.delivery : null;
   const fee = detail.fee && typeof detail.fee === "object" ? detail.fee : null;
 
   return {
     id: String(detail.id || "").trim(),
+    sourceId: String(detail.id || "").trim() || undefined,
     shopId: String(detail.shop_id || "").trim() || undefined,
     logisticId: String(delivery?.logistic_id || "").trim() || undefined,
     city: toNumber(detail.city),
@@ -365,8 +439,8 @@ function toMainSystemPayload(detail: MaiyatianOrderDetail, platform: string): Ma
     orderTime: normalizeOrderTime(detail.order_time),
     userAddress: mapAddress,
     rawShopName: shopName || undefined,
-    shopAddress: shopName || undefined,
-    rawShopAddress: shopName || undefined,
+    shopAddress: shopAddress || undefined,
+    rawShopAddress: shopAddress || undefined,
     isSubscribe: isTruthy(detail.is_subscribe),
     completedAt: normalizeTime(detail.finished_time || detail.finishedTime),
     longitude: toNumber(detail.longitude),
@@ -397,16 +471,30 @@ function toMainSystemPayload(detail: MaiyatianOrderDetail, platform: string): Ma
   };
 }
 
-function inferPlatform(detail: MaiyatianOrderDetail, fallback: string) {
+function inferPlatform(
+  detail: Pick<MaiyatianOrderDetail, "channel_tag_name" | "channel_tag">,
+  fallback: string
+) {
   const explicit = String(detail.channel_tag_name || "").trim();
   if (explicit) {
-    if (explicit === "淘宝闪购") return "淘宝";
-    return explicit;
+    return normalizePlatformName(explicit);
   }
   const channelTag = String(detail.channel_tag || "").trim().toLowerCase();
   if (channelTag === "shangou") return "美团";
   if (channelTag === "daojia") return "京东";
+  if (channelTag === "ebai") return "淘宝";
+  if (channelTag) return normalizePlatformName(channelTag);
   return fallback || "美团";
+}
+
+function normalizePlatformName(platform: string) {
+  const normalized = String(platform || "").trim();
+  if (!normalized) return "";
+  if (normalized === "淘宝闪购") return "淘宝";
+  if (normalized === "meituan") return "美团";
+  if (normalized === "jd") return "京东";
+  if (normalized === "taobao") return "淘宝";
+  return normalized;
 }
 
 function resolveStatus(detail: MaiyatianOrderDetail, statusHint: string) {

@@ -5,7 +5,7 @@ import { logger } from "./logger.js";
 import { sendVerificationCode } from "./mailer.js";
 import { MaiyatianClient } from "./maiyatian.js";
 import { MainSystemClient } from "./main-system-client.js";
-import { AppConfig, AuthUser, ConnectionUpdateInput, DashboardData, FailedEventFilters, FailedEventSummary, RuntimeSettings, SelfDeliveryCommand } from "./types.js";
+import { AppConfig, AuthUser, ConnectionUpdateInput, DashboardData, FailedEventFilters, FailedEventSummary, MealCompleteCommand, PickupCompleteCommand, RuntimeSettings, SelfDeliveryCommand } from "./types.js";
 import { UserRunner } from "./user-runner.js";
 
 export class PluginRuntime {
@@ -226,6 +226,18 @@ export class PluginRuntime {
     const connection = this.requireConnectionByApiKey(apiKey);
     const client = new MaiyatianClient(this.config, connection);
     return client.submitSelfDelivery(command);
+  }
+
+  async pickupComplete(apiKey: string, command: PickupCompleteCommand) {
+    const connection = this.requireConnectionByApiKey(apiKey);
+    const client = new MaiyatianClient(this.config, connection);
+    return client.submitPickupComplete(command);
+  }
+
+  async mealComplete(apiKey: string, command: MealCompleteCommand) {
+    const connection = this.requireConnectionByApiKey(apiKey);
+    const client = new MaiyatianClient(this.config, connection);
+    return client.submitMealComplete(command);
   }
 
   async deleteConnection(id: number) {

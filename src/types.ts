@@ -69,6 +69,8 @@ export type DeliveryEvent =
       platform: string;
       orderNo: string;
       sourceId?: string;
+      dailyPlatformSequence?: number;
+      logisticId?: string;
       rawPayload: unknown;
     }
   | {
@@ -87,6 +89,7 @@ export type DeliveryEvent =
 
 export type MainSystemOrderPayload = {
   id: string;
+  sourceId?: string;
   shopId?: string;
   logisticId?: string;
   city?: number;
@@ -158,6 +161,12 @@ export type MaiyatianOrderDetail = {
   source_sn?: string;
   city?: string | number;
   shop_id?: string | number;
+  shop_address?: string;
+  shopAddress?: string;
+  store_address?: string;
+  storeAddress?: string;
+  merchant_address?: string;
+  merchantAddress?: string;
   channel_tag?: string;
   channel_tag_name?: string;
   channel_id?: string | number;
@@ -263,6 +272,22 @@ export type SelfDeliveryCommand = {
   orderNo: string;
   sourceId: string;
   logisticId: string;
+};
+
+export type PickupCompleteCommand = {
+  platform: string;
+  dailyPlatformSequence: number;
+  orderNo: string;
+  sourceId: string;
+  logisticId?: string;
+};
+
+export type MealCompleteCommand = {
+  platform: string;
+  dailyPlatformSequence: number;
+  orderNo: string;
+  sourceId: string;
+  logisticId?: string;
 };
 
 export type AdminUserSummary = {

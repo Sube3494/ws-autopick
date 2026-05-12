@@ -18,6 +18,8 @@ export class MainSystemClient {
       platform: event.platform,
       orderNo: event.orderNo,
       sourceId: "sourceId" in event ? event.sourceId : undefined,
+      dailyPlatformSequence: "dailyPlatformSequence" in event ? event.dailyPlatformSequence : undefined,
+      logisticId: "logisticId" in event ? event.logisticId : undefined,
     });
   }
 
