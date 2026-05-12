@@ -716,16 +716,41 @@ function renderDashboardPage(data: DashboardData, currentUser: AuthUser, message
       }
     }
 
+    async function copyText(value) {
+      if (!value) return false;
+
+      if (navigator.clipboard && window.isSecureContext) {
+        try {
+          await navigator.clipboard.writeText(value);
+          return true;
+        } catch {}
+      }
+
+      const textarea = document.createElement('textarea');
+      textarea.value = value;
+      textarea.setAttribute('readonly', 'true');
+      textarea.style.position = 'fixed';
+      textarea.style.top = '-9999px';
+      textarea.style.left = '-9999px';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+
+      try {
+        return document.execCommand('copy');
+      } catch {
+        return false;
+      } finally {
+        document.body.removeChild(textarea);
+      }
+    }
+
     for (const button of document.querySelectorAll('[data-copy]')) {
       button.addEventListener('click', async (e) => {
         e.preventDefault();
         const value = button.getAttribute('data-copy') || '';
-        try {
-          await navigator.clipboard.writeText(value);
-          showToast('已复制到剪贴板');
-        } catch {
-          showToast('复制失败，请手动复制');
-        }
+        const copied = await copyText(value);
+        showToast(copied ? '已复制到剪贴板' : '复制失败，请手动复制');
       });
     }
 
