@@ -19,7 +19,7 @@ export class UserRunner {
     orderNo: string;
     sourceId?: string;
     dailyPlatformSequence?: number;
-    logisticId?: string;
+    deliveryId?: string;
   }>();
   private wsConnected = false;
   private lastWsMessageAt?: string;
@@ -139,7 +139,7 @@ export class UserRunner {
         orderNo: event.orderNo,
         sourceId: event.payload.sourceId || event.payload.id,
         dailyPlatformSequence: event.payload.dailyPlatformSequence,
-        logisticId: event.payload.logisticId,
+        deliveryId: event.payload.deliveryId,
       });
 
       if (isAlreadyPickedLikeStatus(event.payload.status)) {
@@ -187,7 +187,7 @@ export class UserRunner {
         orderNo: cached.orderNo,
         sourceId: cached.sourceId || orderId,
         dailyPlatformSequence: cached.dailyPlatformSequence,
-        logisticId: cached.logisticId,
+        deliveryId: cached.deliveryId,
         rawPayload: {
           id: orderId,
           source: "ws-cache",
@@ -206,7 +206,7 @@ export class UserRunner {
         orderNo: fetched.orderNo,
         sourceId: orderId,
         dailyPlatformSequence: fetched.payload.dailyPlatformSequence,
-        logisticId: fetched.payload.logisticId,
+        deliveryId: fetched.payload.deliveryId,
         rawPayload: fetched.rawPayload,
       };
     }
@@ -379,7 +379,7 @@ export class UserRunner {
             orderNo: String(payload.orderNo || "").trim(),
             sourceId,
             dailyPlatformSequence: payload.dailyPlatformSequence,
-            logisticId: payload.logisticId,
+            deliveryId: payload.deliveryId,
           });
 
           this.scheduleMealCompleteIfNeeded({

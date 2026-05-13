@@ -72,7 +72,7 @@ export type DeliveryEvent =
       orderNo: string;
       sourceId?: string;
       dailyPlatformSequence?: number;
-      logisticId?: string;
+      deliveryId?: string;
       rawPayload: unknown;
     }
   | {
@@ -94,7 +94,7 @@ export type MainSystemOrderPayload = {
   id: string;
   sourceId?: string;
   shopId?: string;
-  logisticId?: string;
+  deliveryId?: string;
   city?: number;
   channelTag?: string;
   platform: string;

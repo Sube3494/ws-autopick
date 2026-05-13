@@ -1823,7 +1823,7 @@ export function createServer(runtime: PluginRuntime) {
         }
 
         const sourceId = String(body.sourceId || "").trim();
-        const deliveryId = String(body.deliveryId || body.logisticId || "").trim();
+        const deliveryId = String(body.deliveryId || "").trim();
         const orderNo = String(body.orderNo || "").trim();
         const platform = String(body.platform || "").trim();
         const dailyPlatformSequence = Number(body.dailyPlatformSequence || 0);

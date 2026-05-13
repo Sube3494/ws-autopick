@@ -613,7 +613,7 @@ function readPreferredShopAddress(detail: MaiyatianOrderDetail) {
   ).trim();
 }
 
-function normalizeLogisticId(value: unknown) {
+function normalizeDeliveryId(value: unknown) {
   const normalized = String(value || "").trim();
   if (!normalized || normalized === "0") {
     return undefined;
@@ -659,7 +659,7 @@ function toMainSystemPayload(detail: MaiyatianOrderDetail, platform: string): Ma
     id: String(detail.id || "").trim(),
     sourceId: String(detail.id || "").trim() || undefined,
     shopId: String(detail.shop_id || detail.merchant_id || "").trim() || undefined,
-    logisticId: normalizeLogisticId(delivery?.id || delivery?.logistic_id),
+    deliveryId: normalizeDeliveryId(delivery?.id || delivery?.logistic_id),
     city: toNumber(detail.city),
     channelTag: String(detail.channel_tag || "").trim() || undefined,
     platform,
