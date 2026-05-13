@@ -284,6 +284,14 @@ export type PickupCompleteCommand = {
   logisticId?: string;
 };
 
+export type CompleteDeliveryCommand = {
+  platform: string;
+  dailyPlatformSequence: number;
+  orderNo: string;
+  sourceId: string;
+  logisticId: string;
+};
+
 export type MealCompleteCommand = {
   platform: string;
   dailyPlatformSequence: number;

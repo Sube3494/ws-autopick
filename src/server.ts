@@ -1806,7 +1806,7 @@ export function createServer(runtime: PluginRuntime) {
         return;
       }
 
-      if ((url.pathname === "/pickup-complete" || url.pathname === "/meal-complete") && method === "POST") {
+      if ((url.pathname === "/pickup-complete" || url.pathname === "/meal-complete" || url.pathname === "/complete-delivery") && method === "POST") {
         const apiKey = readApiKey(request.headers);
         if (!runtime.isAuthorized(apiKey)) {
           response.writeHead(401, { "Content-Type": "application/json" });
@@ -1825,15 +1825,26 @@ export function createServer(runtime: PluginRuntime) {
         }
 
         const sourceId = String(body.sourceId || "").trim();
+        const logisticId = String(body.logisticId || "").trim();
         const orderNo = String(body.orderNo || "").trim();
         const platform = String(body.platform || "").trim();
         const dailyPlatformSequence = Number(body.dailyPlatformSequence || 0);
 
-        if (!sourceId || !orderNo || !platform || !Number.isFinite(dailyPlatformSequence) || dailyPlatformSequence <= 0) {
+        const requiresLogisticId = url.pathname === "/complete-delivery";
+        if (
+          !sourceId
+          || !orderNo
+          || !platform
+          || !Number.isFinite(dailyPlatformSequence)
+          || dailyPlatformSequence <= 0
+          || (requiresLogisticId && !logisticId)
+        ) {
           response.writeHead(400, { "Content-Type": "application/json" });
           response.end(JSON.stringify({
             ok: false,
-            error: "platform, dailyPlatformSequence, orderNo and sourceId are required",
+            error: requiresLogisticId
+              ? "platform, dailyPlatformSequence, orderNo, sourceId and logisticId are required"
+              : "platform, dailyPlatformSequence, orderNo and sourceId are required",
           }));
           return;
         }
@@ -1845,12 +1856,20 @@ export function createServer(runtime: PluginRuntime) {
               orderNo,
               sourceId,
             })
-          : await runtime.mealComplete(apiKey || "", {
-              platform,
-              dailyPlatformSequence,
-              orderNo,
-              sourceId,
-            });
+          : url.pathname === "/complete-delivery"
+            ? await runtime.completeDelivery(apiKey || "", {
+                platform,
+                dailyPlatformSequence,
+                orderNo,
+                sourceId,
+                logisticId,
+              })
+            : await runtime.mealComplete(apiKey || "", {
+                platform,
+                dailyPlatformSequence,
+                orderNo,
+                sourceId,
+              });
         response.writeHead(payload.ok ? 200 : 409, { "Content-Type": "application/json" });
         response.end(JSON.stringify(payload));
         return;

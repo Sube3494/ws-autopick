@@ -1,8 +1,9 @@
-import { AppConfig, DeliveryEvent, MainSystemOrderPayload, MaiyatianOrderDetail, MaiyatianOrderSummary, MaiyatianSessionIdentity, MealCompleteCommand, PickupCompleteCommand, SelfDeliveryCommand, UserConfig } from "./types.js";
+import { AppConfig, CompleteDeliveryCommand, DeliveryEvent, MainSystemOrderPayload, MaiyatianOrderDetail, MaiyatianOrderSummary, MaiyatianSessionIdentity, MealCompleteCommand, PickupCompleteCommand, SelfDeliveryCommand, UserConfig } from "./types.js";
 
 const BASE_URL = "https://saas.maiyatian.com";
 const WS_URL = "wss://msg.maiyatian.com/acc";
 const SELF_DELIVERY_SUBMIT_URL = "/delivery/submit/?f=json";
+const COMPLETE_DELIVERY_TRACK_URL = "/delivery/track/?f=json&token=";
 const MEAL_COMPLETE_URL = "/order/mealComplete/?f=json";
 
 type MaiyatianQueryListResponse = {
@@ -222,6 +223,46 @@ export class MaiyatianClient {
       submitParams: {
         id: detailId,
         logisticTag: "picker",
+      },
+    };
+  }
+
+  async submitCompleteDelivery(command: CompleteDeliveryCommand) {
+    const detailId = String(command.sourceId || "").trim();
+    const deliveryId = String(command.logisticId || "").trim();
+    const token = this.requireToken();
+    if (!detailId || !deliveryId) {
+      throw new Error("sourceId and logisticId are required");
+    }
+
+    const body = new URLSearchParams({
+      id: detailId,
+      delivery_id: deliveryId,
+      status: "50",
+      delivery_name: "",
+      delivery_phone: "",
+      tag: "oneself",
+    }).toString();
+
+    const response = await this.postForm(`${COMPLETE_DELIVERY_TRACK_URL}${encodeURIComponent(token)}`, body);
+    const text = await response.text();
+    let parsed: Record<string, unknown> | null = null;
+    try {
+      parsed = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      parsed = null;
+    }
+
+    return {
+      ok: response.ok && Number(parsed?.errno || 0) === 1,
+      status: response.status,
+      parsed,
+      text,
+      submitParams: {
+        id: detailId,
+        delivery_id: deliveryId,
+        status: "50",
+        tag: "oneself",
       },
     };
   }
