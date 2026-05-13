@@ -423,6 +423,7 @@ function toMainSystemPayload(detail: MaiyatianOrderDetail, platform: string): Ma
     || detail.shop_name
     || ""
   ).trim();
+  const fallbackUserAddress = mapAddress || shopAddress || String(detail.delivery_time_format || "").trim() || "到店自提";
   const delivery = detail.delivery && typeof detail.delivery === "object" ? detail.delivery : null;
   const fee = detail.fee && typeof detail.fee === "object" ? detail.fee : null;
 
@@ -437,7 +438,7 @@ function toMainSystemPayload(detail: MaiyatianOrderDetail, platform: string): Ma
     dailyPlatformSequence: Math.max(0, Number(detail.source_sn || 0) || 0),
     orderNo: String(detail.source_id || detail.source_sn || detail.id || "").trim(),
     orderTime: normalizeOrderTime(detail.order_time),
-    userAddress: mapAddress,
+    userAddress: fallbackUserAddress,
     rawShopName: shopName || undefined,
     shopAddress: shopAddress || undefined,
     rawShopAddress: shopAddress || undefined,
