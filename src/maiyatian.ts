@@ -240,10 +240,10 @@ export class MaiyatianClient {
 
   async submitCompleteDelivery(command: CompleteDeliveryCommand) {
     const detailId = String(command.sourceId || "").trim();
-    const deliveryId = String(command.logisticId || "").trim();
+    const deliveryId = String(command.deliveryId || "").trim();
     const token = this.requireToken();
     if (!detailId || !deliveryId) {
-      throw new Error("sourceId and logisticId are required");
+      throw new Error("sourceId and deliveryId are required");
     }
 
     const body = new URLSearchParams({

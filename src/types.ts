@@ -290,7 +290,7 @@ export type PickupCompleteCommand = {
   dailyPlatformSequence: number;
   orderNo: string;
   sourceId: string;
-  logisticId?: string;
+  deliveryId?: string;
 };
 
 export type CompleteDeliveryCommand = {
@@ -298,7 +298,7 @@ export type CompleteDeliveryCommand = {
   dailyPlatformSequence: number;
   orderNo: string;
   sourceId: string;
-  logisticId: string;
+  deliveryId: string;
 };
 
 export type MealCompleteCommand = {
@@ -306,7 +306,7 @@ export type MealCompleteCommand = {
   dailyPlatformSequence: number;
   orderNo: string;
   sourceId: string;
-  logisticId?: string;
+  deliveryId?: string;
 };
 
 export type AdminUserSummary = {

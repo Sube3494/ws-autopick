@@ -1823,7 +1823,7 @@ export function createServer(runtime: PluginRuntime) {
         }
 
         const sourceId = String(body.sourceId || "").trim();
-        const logisticId = String(body.logisticId || "").trim();
+        const deliveryId = String(body.deliveryId || body.logisticId || "").trim();
         const orderNo = String(body.orderNo || "").trim();
         const platform = String(body.platform || "").trim();
         const dailyPlatformSequence = Number(body.dailyPlatformSequence || 0);
@@ -1835,13 +1835,13 @@ export function createServer(runtime: PluginRuntime) {
           || !platform
           || !Number.isFinite(dailyPlatformSequence)
           || dailyPlatformSequence <= 0
-          || (requiresLogisticId && !logisticId)
+          || (requiresLogisticId && !deliveryId)
         ) {
           response.writeHead(400, { "Content-Type": "application/json" });
           response.end(JSON.stringify({
             ok: false,
             error: requiresLogisticId
-              ? "platform, dailyPlatformSequence, orderNo, sourceId and logisticId are required"
+              ? "platform, dailyPlatformSequence, orderNo, sourceId and deliveryId are required"
               : "platform, dailyPlatformSequence, orderNo and sourceId are required",
           }));
           return;
@@ -1860,7 +1860,7 @@ export function createServer(runtime: PluginRuntime) {
                 dailyPlatformSequence,
                 orderNo,
                 sourceId,
-                logisticId,
+                deliveryId,
               })
             : await runtime.mealComplete(apiKey || "", {
                 platform,
