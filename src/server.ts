@@ -1828,19 +1828,19 @@ export function createServer(runtime: PluginRuntime) {
         const platform = String(body.platform || "").trim();
         const dailyPlatformSequence = Number(body.dailyPlatformSequence || 0);
 
-        const requiresLogisticId = url.pathname === "/complete-delivery";
+        const requiresDeliveryId = url.pathname === "/complete-delivery";
         if (
           !sourceId
           || !orderNo
           || !platform
           || !Number.isFinite(dailyPlatformSequence)
           || dailyPlatformSequence <= 0
-          || (requiresLogisticId && !deliveryId)
+          || (requiresDeliveryId && !deliveryId)
         ) {
           response.writeHead(400, { "Content-Type": "application/json" });
           response.end(JSON.stringify({
             ok: false,
-            error: requiresLogisticId
+            error: requiresDeliveryId
               ? "platform, dailyPlatformSequence, orderNo, sourceId and deliveryId are required"
               : "platform, dailyPlatformSequence, orderNo and sourceId are required",
           }));
