@@ -300,8 +300,12 @@ export class MaiyatianClient {
       parsed = null;
     }
 
+    const errno = Number(parsed?.errno || 0);
+    const message = String(parsed?.message || "").trim();
+    const alreadyCompleted = errno === 5011 || /已完成备货|不能重复备货/.test(message);
+
     return {
-      ok: response.ok && Number(parsed?.errno || 0) === 1,
+      ok: response.ok && (errno === 1 || alreadyCompleted),
       status: response.status,
       parsed,
       text,
