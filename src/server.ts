@@ -1467,6 +1467,7 @@ function parseSettings(body: Record<string, string>, current: RuntimeSettings): 
     wsHeartbeatIntervalMs: Number(body.wsHeartbeatIntervalMs || current.wsHeartbeatIntervalMs),
     wsReconnectBaseMs: Number(body.wsReconnectBaseMs || current.wsReconnectBaseMs),
     wsReconnectMaxMs: Number(body.wsReconnectMaxMs || current.wsReconnectMaxMs),
+    mealCompleteCooldownMs: Number(body.mealCompleteCooldownMs || current.mealCompleteCooldownMs),
     statuses: String(body.statuses || current.statuses.join(",")).split(",").map((item) => item.trim()).filter(Boolean),
   };
 }

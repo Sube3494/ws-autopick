@@ -11,6 +11,7 @@ export class UserRunner {
   private readonly dedupe: DedupeStore;
   private readonly ws: MaiyatianWsClient;
   private readonly mealCompleteTimers = new Map<string, NodeJS.Timeout>();
+  private readonly mealCompleteCooldowns = new Map<string, number>();
   private readonly startupBackfillStatuses = ["confirm", "subscribe", "meal"];
   private readonly orderIdentityByOrderId = new Map<string, {
     platform: string;
@@ -80,6 +81,7 @@ export class UserRunner {
       clearTimeout(timer);
     }
     this.mealCompleteTimers.clear();
+    this.mealCompleteCooldowns.clear();
   }
 
   snapshot(failedEventCount: number): UserRuntimeSnapshot {
@@ -232,6 +234,10 @@ export class UserRunner {
     }
 
     const scheduleKey = `${event.sourceLabel}:${sourceId}`;
+    const cooldownUntil = this.mealCompleteCooldowns.get(scheduleKey) || 0;
+    if (cooldownUntil > Date.now()) {
+      return;
+    }
     if (this.mealCompleteTimers.has(scheduleKey)) {
       return;
     }
@@ -271,6 +277,7 @@ export class UserRunner {
         label: this.user.label,
         orderNo: event.orderNo,
       });
+      this.mealCompleteCooldowns.set(scheduleKey, Date.now() + this.config.mealCompleteCooldownMs);
 
       await this.process({
         kind: "progress",

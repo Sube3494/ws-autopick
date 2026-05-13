@@ -48,6 +48,16 @@ async function main() {
 
   process.on("SIGINT", () => void shutdown("SIGINT"));
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
+  process.on("unhandledRejection", (error) => {
+    logger.error("unhandled rejection", {
+      error: error instanceof Error ? error.stack || error.message : String(error),
+    });
+  });
+  process.on("uncaughtException", (error) => {
+    logger.error("uncaught exception", {
+      error: error instanceof Error ? error.stack || error.message : String(error),
+    });
+  });
 }
 
 void main().catch((error) => {

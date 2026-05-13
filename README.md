@@ -52,15 +52,45 @@ bun run start
 bun run dev
 ```
 
+## Docker Compose 部署
+
+`ws-autopick` 目录内自带独立的 `docker-compose.yaml`，可以单独部署，不需要并到主系统的 compose 里。
+
+先准备配置：
+
+```bash
+cp .env.example .env
+```
+
+`.env` 里只需要保留启动必需项，例如监听地址、sqlite 路径和 SMTP。
+像主系统地址、插件公开地址、超时、重试、轮询间隔这类运行参数，首次启动后会写入 sqlite，后续统一在网页管理台里修改。
+
+启动：
+
+```bash
+docker compose up -d --build
+```
+
+默认端口：
+
+- ws-autopick 管理台：`22800`
+
+sqlite 数据会持久化到宿主机：
+
+```txt
+./data
+```
+
 ## 环境变量
 
 `.env` 只保留启动必需项。业务运行参数会在首次启动时写入 sqlite，后续统一在管理台中修改。
 
 ```txt
-HOST=127.0.0.1
+CONTAINER_NAME=ws-autopick
+HOST=0.0.0.0
 PORT=22800
-DATA_DIR=./data
-DB_PATH=./data/ws-autopick.sqlite
+DATA_DIR=/app/data
+DB_PATH=/app/data/ws-autopick.sqlite
 SMTP_HOST=smtp.qq.com
 SMTP_PORT=465
 SMTP_USER=example@qq.com
@@ -68,6 +98,15 @@ SMTP_PASS=your_smtp_key
 SMTP_FROM=ws-autopick <example@qq.com>
 SMTP_SECURE=true
 ```
+
+首次启动后建议在管理台确认这些运行参数：
+
+- 主系统地址
+- 插件公开地址
+- HTTP 超时
+- 失败重试间隔
+- WS 心跳与重连参数
+- 轮询状态列表
 
 ## 管理台
 

@@ -70,7 +70,12 @@ export class MainSystemClient {
 
 function isTransientSocketError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return true;
+  }
   return message.includes("socket connection was closed unexpectedly")
+    || message.includes("The operation was aborted")
+    || message.includes("AbortError")
     || message.includes("ECONNRESET")
     || message.includes("UND_ERR_SOCKET")
     || message.includes("other side closed")

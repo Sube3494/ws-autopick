@@ -1,0 +1,14 @@
+services:
+  ws-autopick:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ${CONTAINER_NAME:-ws-autopick}
+    init: true
+    restart: unless-stopped
+    ports:
+      - "${PORT:-22800}:${PORT:-22800}"
+    env_file:
+      - ./.env
+    volumes:
+      - ./data:${DATA_DIR:-/app/data}

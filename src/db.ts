@@ -438,7 +438,7 @@ export class AppDatabase {
       pushBaseUrl: map.get("pushBaseUrl") || "",
       publicBaseUrl: map.get("publicBaseUrl") || "",
       pollIntervalMs: Number(map.get("pollIntervalMs") || 15000),
-      httpTimeoutMs: Number(map.get("httpTimeoutMs") || 10000),
+      httpTimeoutMs: Number(map.get("httpTimeoutMs") || 15000),
       maxListPages: Number(map.get("maxListPages") || 5),
       pageSize: Number(map.get("pageSize") || 20),
       failedRetryIntervalMs: Number(map.get("failedRetryIntervalMs") || 30000),
@@ -446,6 +446,7 @@ export class AppDatabase {
       wsHeartbeatIntervalMs: Number(map.get("wsHeartbeatIntervalMs") || 30000),
       wsReconnectBaseMs: Number(map.get("wsReconnectBaseMs") || 1000),
       wsReconnectMaxMs: Number(map.get("wsReconnectMaxMs") || 30000),
+      mealCompleteCooldownMs: Number(map.get("mealCompleteCooldownMs") || 600000),
       statuses: JSON.parse(map.get("statuses") || "[]"),
     };
   }
@@ -464,6 +465,7 @@ export class AppDatabase {
       ["wsHeartbeatIntervalMs", String(input.wsHeartbeatIntervalMs)],
       ["wsReconnectBaseMs", String(input.wsReconnectBaseMs)],
       ["wsReconnectMaxMs", String(input.wsReconnectMaxMs)],
+      ["mealCompleteCooldownMs", String(input.mealCompleteCooldownMs)],
       ["statuses", JSON.stringify(input.statuses)],
     ];
     for (const [key, value] of entries) {
@@ -549,6 +551,7 @@ export class AppDatabase {
       wsHeartbeatIntervalMs: config.wsHeartbeatIntervalMs,
       wsReconnectBaseMs: config.wsReconnectBaseMs,
       wsReconnectMaxMs: config.wsReconnectMaxMs,
+      mealCompleteCooldownMs: config.mealCompleteCooldownMs,
       statuses: config.statuses,
     };
   }
