@@ -220,6 +220,7 @@ export type MaiyatianOrderDetail = {
     track?: string;
     delivery_name?: string;
     finished_time?: string | number;
+    shop_id?: string | number;
   } | false;
   is_cancel?: string | number | boolean;
   cancel_status?: string | number;

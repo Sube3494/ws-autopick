@@ -10,8 +10,17 @@ type MaiyatianQueryListResponse = {
   data?: MaiyatianOrderDetail[];
 };
 
+type MaiyatianShopRecord = {
+  id: string;
+  name: string;
+  address: string;
+  cityCode?: string;
+  cityName?: string;
+};
+
 export class MaiyatianClient {
   private identityPromise?: Promise<MaiyatianSessionIdentity>;
+  private shopMapPromise?: Promise<Map<string, MaiyatianShopRecord>>;
 
   constructor(private readonly config: AppConfig, private readonly user: UserConfig) {}
 
@@ -55,7 +64,7 @@ export class MaiyatianClient {
     for (const summary of orders) {
       const orderId = String(summary.id || "").trim();
       if (!orderId) continue;
-      const detail = await this.fetchOrderDetail(orderId);
+      const detail = await this.fetchOrderDetailWithShopAddress(orderId);
       const platform = inferPlatform(detail, inferPlatform(summary, this.user.platform));
       results.push(toMainSystemPayload(detail, platform));
     }
@@ -102,7 +111,7 @@ export class MaiyatianClient {
       for (const row of rows) {
         const orderId = String(row.id || "").trim();
         if (!orderId) continue;
-        const detail = await this.fetchOrderDetail(orderId);
+        const detail = await this.fetchOrderDetailWithShopAddress(orderId);
         const platform = inferPlatform(detail, inferPlatform(row, this.user.platform));
         results.push(toMainSystemPayload(detail, platform));
       }
@@ -130,6 +139,11 @@ export class MaiyatianClient {
     return response.data;
   }
 
+  async fetchOrderDetailWithShopAddress(orderId: string) {
+    const detail = await this.fetchOrderDetail(orderId);
+    return await this.fillShopAddress(detail);
+  }
+
   async fetchSessionIdentity() {
     if (!this.identityPromise) {
       this.identityPromise = this.loadSessionIdentity();
@@ -138,7 +152,7 @@ export class MaiyatianClient {
   }
 
   async buildEventFromOrderId(orderId: string, statusHint = "") {
-    const detail = await this.fetchOrderDetail(orderId);
+    const detail = await this.fetchOrderDetailWithShopAddress(orderId);
     return this.toEvent(detail, statusHint);
   }
 
@@ -305,7 +319,7 @@ export class MaiyatianClient {
       for (const summary of orders) {
         const orderId = String(summary.id || "").trim();
         if (!orderId) continue;
-        const detail = await this.fetchOrderDetail(orderId);
+        const detail = await this.fetchOrderDetailWithShopAddress(orderId);
         events.push(this.toEvent(detail, status));
       }
     }
@@ -381,6 +395,72 @@ export class MaiyatianClient {
     return token;
   }
 
+  private async fillShopAddress(detail: MaiyatianOrderDetail) {
+    const existing = readPreferredShopAddress(detail);
+    if (existing) {
+      return detail;
+    }
+
+    const delivery = detail.delivery && typeof detail.delivery === "object" ? detail.delivery : null;
+    const shopId = String(detail.shop_id || delivery?.shop_id || detail.merchant_id || "").trim();
+    if (!shopId) {
+      return detail;
+    }
+
+    const shopMap = await this.fetchShopMap();
+    const matched = shopMap.get(shopId);
+    if (!matched?.address) {
+      return detail;
+    }
+
+    return {
+      ...detail,
+      shop_address: String(detail.shop_address || "").trim() || matched.address,
+      shopAddress: String(detail.shopAddress || "").trim() || matched.address,
+      store_address: String(detail.store_address || "").trim() || matched.address,
+      storeAddress: String(detail.storeAddress || "").trim() || matched.address,
+      merchant_address: String(detail.merchant_address || "").trim() || matched.address,
+      merchantAddress: String(detail.merchantAddress || "").trim() || matched.address,
+      channel_address: String(detail.channel_address || "").trim() || matched.address,
+      channelAddress: String(detail.channelAddress || "").trim() || matched.address,
+      extend: {
+        ...(detail.extend && typeof detail.extend === "object" ? detail.extend : {}),
+        storeAddress: readNestedString(detail.extend, "storeAddress") || matched.address,
+        store_address: readNestedString(detail.extend, "store_address") || matched.address,
+        merchantAddress: readNestedString(detail.extend, "merchantAddress") || matched.address,
+        merchant_address: readNestedString(detail.extend, "merchant_address") || matched.address,
+        channelAddress: readNestedString(detail.extend, "channelAddress") || matched.address,
+        channel_address: readNestedString(detail.extend, "channel_address") || matched.address,
+      },
+    };
+  }
+
+  private async fetchShopMap() {
+    if (!this.shopMapPromise) {
+      this.shopMapPromise = this.loadShopMap();
+    }
+    return this.shopMapPromise;
+  }
+
+  private async loadShopMap() {
+    const entryHtml = await this.fetchHtml("/shop/");
+    const cityTabs = parseMaiyatianCityTabs(entryHtml);
+    const deduped = new Map<string, MaiyatianShopRecord>();
+
+    for (const shop of parseMaiyatianShopRows(entryHtml)) {
+      deduped.set(shop.id, shop);
+    }
+
+    for (const city of cityTabs) {
+      const cityHtml = await this.fetchHtml(`/shop/?city=${encodeURIComponent(city.cityCode)}`);
+      for (const shop of parseMaiyatianShopRows(cityHtml, city.cityCode, city.cityName)) {
+        deduped.set(shop.id, shop);
+      }
+    }
+
+    return deduped;
+  }
+
   private async get<T>(url: URL) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.config.httpTimeoutMs);
@@ -449,6 +529,87 @@ export class MaiyatianClient {
 function matchFirst(input: string, pattern: RegExp) {
   const match = input.match(pattern);
   return match?.[1]?.trim() || "";
+}
+
+function stripHtmlTags(input: string) {
+  return String(input || "")
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseMaiyatianCityTabs(html: string) {
+  const result: Array<{ cityCode: string; cityName: string }> = [];
+  const cityPattern = /<a[^>]+href="\/shop\/\?city=([^"]+)"[^>]*>\s*<span>([^<]+)<\/span>\s*<\/a>/gi;
+  let match: RegExpExecArray | null = null;
+
+  while ((match = cityPattern.exec(html))) {
+    const cityCode = String(match[1] || "").trim();
+    const cityName = stripHtmlTags(match[2] || "");
+    if (!cityCode || cityCode === "all" || !cityName) {
+      continue;
+    }
+    result.push({ cityCode, cityName });
+  }
+
+  return result;
+}
+
+function parseMaiyatianShopRows(html: string, cityCode?: string, cityName?: string) {
+  const shops: MaiyatianShopRecord[] = [];
+  const rowPattern = /<tr>\s*<td class="multi">([\s\S]*?)<\/td>\s*<td>([\s\S]*?)<\/td>[\s\S]*?\/shop\/edit\/\?id=(\d+)/gi;
+  let match: RegExpExecArray | null = null;
+
+  while ((match = rowPattern.exec(html))) {
+    const multiCell = String(match[1] || "");
+    const id = String(match[3] || "").trim();
+    const labelMatch = multiCell.match(/<label>([\s\S]*?)<\/label>/i);
+    const address = stripHtmlTags(labelMatch?.[1] || "");
+    const name = stripHtmlTags(multiCell.replace(/<label>[\s\S]*?<\/label>/i, ""));
+
+    if (!id || !name || !address) {
+      continue;
+    }
+
+    shops.push({
+      id,
+      name,
+      address,
+      cityCode: cityCode || undefined,
+      cityName: cityName || undefined,
+    });
+  }
+
+  return shops;
+}
+
+function readNestedString(value: unknown, key: string) {
+  if (!value || typeof value !== "object") {
+    return "";
+  }
+  return String((value as Record<string, unknown>)[key] || "").trim();
+}
+
+function readPreferredShopAddress(detail: MaiyatianOrderDetail) {
+  return String(
+    detail.shop_address
+    || detail.shopAddress
+    || detail.store_address
+    || detail.storeAddress
+    || detail.merchant_address
+    || detail.merchantAddress
+    || detail.channel_address
+    || detail.channelAddress
+    || readNestedString(detail.extend, "storeAddress")
+    || readNestedString(detail.extend, "store_address")
+    || readNestedString(detail.extend, "merchantAddress")
+    || readNestedString(detail.extend, "merchant_address")
+    || readNestedString(detail.extend, "channelAddress")
+    || readNestedString(detail.extend, "channel_address")
+    || ""
+  ).trim();
 }
 
 function normalizeLogisticId(value: unknown) {
