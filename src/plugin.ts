@@ -224,6 +224,20 @@ export class PluginRuntime {
 
   async selfDelivery(apiKey: string, command: SelfDeliveryCommand) {
     const connection = this.requireConnectionByApiKey(apiKey);
+    const runner = this.runners.get(connection.id);
+    if (runner) {
+      const pickDone = await runner.waitForPickingComplete(command.orderNo, 40_000);
+      if (!pickDone) {
+        return {
+          ok: false,
+          status: 409,
+          parsed: null,
+          text: "picking-not-completed",
+          error: "picking-not-completed",
+        };
+      }
+    }
+
     const client = new MaiyatianClient(this.config, connection);
     return client.submitSelfDelivery(command);
   }

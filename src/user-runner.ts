@@ -10,6 +10,7 @@ export class UserRunner {
   private readonly source: MaiyatianClient;
   private readonly dedupe: DedupeStore;
   private readonly ws: MaiyatianWsClient;
+  private readonly pendingPicking = new Map<string, { resolve: () => void; promise: Promise<void> }>();
   private readonly mealCompleteTimers = new Map<string, NodeJS.Timeout>();
   private readonly mealCompleteCooldowns = new Map<string, number>();
   private readonly startupBackfillStatuses = ["confirm", "subscribe", "meal"];
@@ -82,6 +83,7 @@ export class UserRunner {
     }
     this.mealCompleteTimers.clear();
     this.mealCompleteCooldowns.clear();
+    this.pendingPicking.clear();
   }
 
   snapshot(failedEventCount: number): UserRuntimeSnapshot {
@@ -97,6 +99,19 @@ export class UserRunner {
       lastError: this.lastError,
       failedEventCount,
     };
+  }
+
+  async waitForPickingComplete(orderNo: string, timeoutMs: number) {
+    const key = String(orderNo || "").trim();
+    const entry = key ? this.pendingPicking.get(key) : null;
+    if (!entry) {
+      return true;
+    }
+
+    return await Promise.race([
+      entry.promise.then(() => true as const),
+      new Promise<false>((resolve) => setTimeout(() => resolve(false), timeoutMs)),
+    ]);
   }
 
   private async process(event: DeliveryEvent) {
@@ -122,6 +137,18 @@ export class UserRunner {
         dailyPlatformSequence: event.payload.dailyPlatformSequence,
         logisticId: event.payload.logisticId,
       });
+
+      if (isAlreadyPickedLikeStatus(event.payload.status)) {
+        this.resolvePickingOrder(event.orderNo);
+      }
+    }
+
+    if (event.kind === "progress" && event.progress.pickCompleted) {
+      this.resolvePickingOrder(event.orderNo);
+    }
+
+    if (event.kind === "delete") {
+      this.resolvePickingOrder(event.orderNo);
     }
 
     try {
@@ -225,6 +252,7 @@ export class UserRunner {
 
   private scheduleMealCompleteIfNeeded(event: Extract<DeliveryEvent, { kind: "upsert" }>) {
     if (isAlreadyPickedLikeStatus(event.payload.status)) {
+      this.resolvePickingOrder(event.orderNo);
       return;
     }
 
@@ -242,6 +270,7 @@ export class UserRunner {
       return;
     }
 
+    this.registerPickingOrder(event.orderNo);
     const timer = setTimeout(() => {
       void this.runScheduledMealComplete(scheduleKey, event, sourceId);
     }, 60_000);
@@ -302,6 +331,8 @@ export class UserRunner {
         orderNo: event.orderNo,
         error: error instanceof Error ? error.message : String(error),
       });
+    } finally {
+      this.resolvePickingOrder(event.orderNo);
     }
   }
 
@@ -342,6 +373,34 @@ export class UserRunner {
         });
       }
     }
+  }
+
+  private registerPickingOrder(orderNo: string) {
+    const key = String(orderNo || "").trim();
+    if (!key || this.pendingPicking.has(key)) {
+      return;
+    }
+
+    let resolve!: () => void;
+    const promise = new Promise<void>((resolver) => {
+      resolve = resolver;
+    });
+    this.pendingPicking.set(key, { resolve, promise });
+  }
+
+  private resolvePickingOrder(orderNo: string) {
+    const key = String(orderNo || "").trim();
+    if (!key) {
+      return;
+    }
+
+    const entry = this.pendingPicking.get(key);
+    if (!entry) {
+      return;
+    }
+
+    entry.resolve();
+    this.pendingPicking.delete(key);
   }
 }
 
