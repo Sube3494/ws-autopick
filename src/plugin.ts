@@ -226,7 +226,7 @@ export class PluginRuntime {
     const connection = this.requireConnectionByApiKey(apiKey);
     const runner = this.runners.get(connection.id);
     if (runner) {
-      const pickDone = await runner.waitForPickingComplete(command.orderNo, 35_000);
+      const pickDone = await runner.waitForPickingComplete(command.orderNo, 30_000);
       if (!pickDone) {
         return {
           ok: false,
