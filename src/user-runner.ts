@@ -49,6 +49,10 @@ export class UserRunner {
         if (event.kind !== "detail") {
           return;
         }
+        const instantStatusEvent = this.buildStatusProgressEvent(event.orderId, event.statusHint, event.raw);
+        if (instantStatusEvent) {
+          await this.process(instantStatusEvent);
+        }
         const deliveryEvent = event.statusHint === "delete"
           ? await this.buildDeleteEvent(event.orderId)
           : await this.source.buildEventFromOrderId(event.orderId, event.statusHint);
@@ -248,6 +252,30 @@ export class UserRunner {
       }
     }
     return null;
+  }
+
+  private buildStatusProgressEvent(orderId: string, statusHint: string, rawPayload: unknown): DeliveryEvent | null {
+    if (!statusHint || statusHint === "delete") {
+      return null;
+    }
+
+    const identity = this.orderIdentityByOrderId.get(orderId);
+    if (!identity?.platform || !identity.orderNo) {
+      return null;
+    }
+
+    return {
+      kind: "progress",
+      sourceLabel: this.user.label,
+      apiKey: this.user.apiKey,
+      eventId: `${this.user.label}:${orderId}:progress:status:${statusHint}`,
+      platform: identity.platform,
+      orderNo: identity.orderNo,
+      progress: {
+        statusHint,
+      },
+      rawPayload,
+    };
   }
 
   private scheduleMealCompleteIfNeeded(event: Extract<DeliveryEvent, { kind: "upsert" }>) {

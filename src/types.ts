@@ -85,6 +85,7 @@ export type DeliveryEvent =
       progress: {
         pickCompleted?: boolean;
         pickRemainingSeconds?: number;
+        statusHint?: string;
       };
       rawPayload: unknown;
     };
