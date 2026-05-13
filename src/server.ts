@@ -1780,16 +1780,15 @@ export function createServer(runtime: PluginRuntime) {
         }
 
         const sourceId = String(body.sourceId || "").trim();
-        const logisticId = String(body.logisticId || "").trim();
         const orderNo = String(body.orderNo || "").trim();
         const platform = String(body.platform || "").trim();
         const dailyPlatformSequence = Number(body.dailyPlatformSequence || 0);
 
-        if (!sourceId || !logisticId || !orderNo || !platform || !Number.isFinite(dailyPlatformSequence) || dailyPlatformSequence <= 0) {
+        if (!sourceId || !orderNo || !platform || !Number.isFinite(dailyPlatformSequence) || dailyPlatformSequence <= 0) {
           response.writeHead(400, { "Content-Type": "application/json" });
           response.end(JSON.stringify({
             ok: false,
-            error: "platform, dailyPlatformSequence, orderNo, sourceId and logisticId are required",
+            error: "platform, dailyPlatformSequence, orderNo and sourceId are required",
           }));
           return;
         }
@@ -1799,7 +1798,6 @@ export function createServer(runtime: PluginRuntime) {
           dailyPlatformSequence,
           orderNo,
           sourceId,
-          logisticId,
         });
         response.writeHead(payload.ok ? 200 : 409, { "Content-Type": "application/json" });
         response.end(JSON.stringify(payload));

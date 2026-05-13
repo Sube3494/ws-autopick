@@ -282,7 +282,7 @@ export type SelfDeliveryCommand = {
   dailyPlatformSequence: number;
   orderNo: string;
   sourceId: string;
-  logisticId: string;
+  logisticId?: string;
 };
 
 export type PickupCompleteCommand = {

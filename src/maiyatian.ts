@@ -158,15 +158,13 @@ export class MaiyatianClient {
 
   async submitSelfDelivery(command: SelfDeliveryCommand) {
     const detailId = String(command.sourceId || "").trim();
-    const logisticId = String(command.logisticId || "").trim();
-    if (!detailId || !logisticId) {
-      throw new Error("sourceId and logisticId are required");
+    if (!detailId) {
+      throw new Error("sourceId is required");
     }
 
     const body = new URLSearchParams({
       id: detailId,
       dispatcherId: "0",
-      logisticId,
       logisticTag: "oneself",
       tip: "0",
       weight: "0",
@@ -203,7 +201,6 @@ export class MaiyatianClient {
       text,
       submitParams: {
         id: detailId,
-        logisticId,
         logisticTag: "oneself",
       },
     };
