@@ -451,9 +451,26 @@ function matchFirst(input: string, pattern: RegExp) {
   return match?.[1]?.trim() || "";
 }
 
+function normalizeLogisticId(value: unknown) {
+  const normalized = String(value || "").trim();
+  if (!normalized || normalized === "0") {
+    return undefined;
+  }
+  return normalized;
+}
+
 function toMainSystemPayload(detail: MaiyatianOrderDetail, platform: string): MainSystemOrderPayload {
   const mapAddress = String(detail.map_address || detail.address || "").trim();
-  const shopName = String(detail.shop_name || detail.extend?.channel_name || "").trim();
+  const shopName = String(
+    detail.shop_name
+    || detail.channel_name
+    || detail.channelName
+    || detail.storeName
+    || detail.merchantName
+    || detail.merchant_name
+    || detail.extend?.channel_name
+    || ""
+  ).trim();
   const shopAddress = String(
     detail.shop_address
     || detail.shopAddress
@@ -461,6 +478,14 @@ function toMainSystemPayload(detail: MaiyatianOrderDetail, platform: string): Ma
     || detail.storeAddress
     || detail.merchant_address
     || detail.merchantAddress
+    || detail.channel_address
+    || detail.channelAddress
+    || detail.extend?.storeAddress
+    || detail.extend?.store_address
+    || detail.extend?.merchantAddress
+    || detail.extend?.merchant_address
+    || detail.extend?.channelAddress
+    || detail.extend?.channel_address
     || detail.shop_name
     || ""
   ).trim();
@@ -471,8 +496,8 @@ function toMainSystemPayload(detail: MaiyatianOrderDetail, platform: string): Ma
   return {
     id: String(detail.id || "").trim(),
     sourceId: String(detail.id || "").trim() || undefined,
-    shopId: String(detail.shop_id || "").trim() || undefined,
-    logisticId: String(delivery?.logistic_id || "").trim() || undefined,
+    shopId: String(detail.shop_id || detail.merchant_id || "").trim() || undefined,
+    logisticId: normalizeLogisticId(delivery?.id || delivery?.logistic_id),
     city: toNumber(detail.city),
     channelTag: String(detail.channel_tag || "").trim() || undefined,
     platform,
