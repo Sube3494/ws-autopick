@@ -224,7 +224,6 @@ function parseNestedNotify(value: unknown): WsNotifyEvent | null {
 function normalizeNotifyStatusHint(value: unknown) {
   const raw = String(value || "").trim().toLowerCase();
   if (!raw) return "";
-  if (raw === "rollback") return "delete";
   return raw;
 }
 

@@ -501,9 +501,22 @@ function resolveStatus(detail: MaiyatianOrderDetail, statusHint: string) {
   const rawStatus = String(detail.status || "").trim().toLowerCase();
   const deliveryTrack = String(detail.delivery && typeof detail.delivery === "object" ? detail.delivery.track || "" : "").trim();
   const isCancelled = isTruthy(detail.is_cancel) || String(detail.cancel_status || "").trim() !== "" && String(detail.cancel_status) !== "0";
-  const cancelledByStatus = ["cancel", "cancelled", "deleted", "delete", "close", "closed"].includes(rawStatus) || /取消|撤销|删除/.test(deliveryTrack);
+  const deletedByStatus = ["deleted", "delete"].includes(rawStatus) || /删除/.test(deliveryTrack);
+  const cancelledByStatus = ["cancel", "cancelled", "canceled", "close", "closed"].includes(rawStatus) || /取消|撤销|回滚/.test(deliveryTrack);
 
-  if (isCancelled || cancelledByStatus || statusHint === "cancel" || statusHint === "delete") {
+  if (deletedByStatus || statusHint === "delete") {
+    return { kind: "delete" as const, value: rawStatus || "delete" };
+  }
+
+  if (isCancelled || cancelledByStatus || statusHint === "cancel" || statusHint === "rollback") {
+    return { kind: "upsert" as const, value: rawStatus || "cancel" };
+  }
+
+  if (statusHint === "close" || statusHint === "closed") {
+    return { kind: "upsert" as const, value: rawStatus || "cancel" };
+  }
+
+  if (statusHint === "deleted" || statusHint === "remove") {
     return { kind: "delete" as const, value: rawStatus || "cancel" };
   }
 
