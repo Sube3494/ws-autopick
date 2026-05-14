@@ -334,19 +334,16 @@ function renderFailedEventRows(items: FailedEventSummary[]) {
       <td data-label="订单">
         <div class="cell-stack">
           <code>${escapeHtml(item.orderNo)}</code>
-          <span class="time-stack cell-subtle" title="${escapeHtml(String(item.nextRetryAt || ""))}">
-            <span>${escapeHtml(formatAdminDateTime(item.nextRetryAt).dateLabel)}</span>
-            <span>${escapeHtml(formatAdminDateTime(item.nextRetryAt).timeLabel)}</span>
-          </span>
+          <span class="cell-subtle">${escapeHtml(item.platform)}</span>
         </div>
       </td>
       <td data-label="类型"><span class="kind-badge kind-${escapeHtml(item.kind)}">${escapeHtml(formatFailedEventType(item.kind))}</span></td>
       <td data-label="重试">
         <div class="cell-stack">
           <span class="attempt-badge">${item.attempts}</span>
-          <span class="retry-time">下次重试</span>
         </div>
       </td>
+      <td data-label="时间"><span class="retry-time" title="${escapeHtml(String(item.nextRetryAt || ""))}">${escapeHtml(`${formatAdminDateTime(item.nextRetryAt).dateLabel} ${formatAdminDateTime(item.nextRetryAt).timeLabel}`)}</span></td>
       <td data-label="最近错误">${renderFailedEventError(item.lastError)}</td>
     </tr>
   `).join("");
@@ -1153,7 +1150,8 @@ function renderFailedEventsPage(options: {
     th:nth-child(1), td:nth-child(1) { width: 120px; }
     th:nth-child(2), td:nth-child(2) { width: 230px; }
     th:nth-child(3), td:nth-child(3) { width: 110px; }
-    th:nth-child(4), td:nth-child(4) { width: 120px; }
+    th:nth-child(4), td:nth-child(4) { width: 90px; }
+    th:nth-child(5), td:nth-child(5) { width: 170px; }
     .cell-stack { display: grid; gap: 6px; min-width: 0; }
     .cell-subtle {
       color: var(--text-muted);
@@ -1190,12 +1188,6 @@ function renderFailedEventsPage(options: {
       white-space: normal;
       font-variant-numeric: tabular-nums;
       font-size: 12px;
-    }
-    .time-stack {
-      display: grid;
-      gap: 2px;
-      font-variant-numeric: tabular-nums;
-      line-height: 1.35;
     }
     .error-stack { display: grid; gap: 8px; max-width: 100%; }
     .error-summary { font-weight: 700; line-height: 1.5; }
@@ -1515,6 +1507,7 @@ function renderFailedEventsPage(options: {
                 <th>订单</th>
                 <th>类型</th>
                 <th>重试</th>
+                <th>时间</th>
                 <th>最近错误</th>
               </tr>
             </thead>

@@ -8,6 +8,8 @@ import { MainSystemClient } from "./main-system-client.js";
 import { AppConfig, AuthUser, CompleteDeliveryCommand, ConnectionUpdateInput, DashboardData, FailedEventFilters, FailedEventSummary, MealCompleteCommand, PickupCompleteCommand, RuntimeSettings, SelfDeliveryCommand } from "./types.js";
 import { UserRunner } from "./user-runner.js";
 
+const MAX_FAILED_EVENT_ATTEMPTS = 50;
+
 export class PluginRuntime {
   private readonly client: MainSystemClient;
   private readonly runners = new Map<number, UserRunner>();
@@ -287,6 +289,18 @@ export class PluginRuntime {
           logger.warn("dropped permanent failed event", {
             id: record.id,
             label: record.event.sourceLabel,
+            error: message,
+          });
+          continue;
+        }
+
+        if (record.attempts >= MAX_FAILED_EVENT_ATTEMPTS) {
+          await this.failedStore.markSucceeded(record.id);
+          logger.warn("dropped failed event after max retry attempts", {
+            id: record.id,
+            label: record.event.sourceLabel,
+            orderNo: record.event.orderNo,
+            attempts: record.attempts,
             error: message,
           });
           continue;
