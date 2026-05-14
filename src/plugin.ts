@@ -388,7 +388,10 @@ function normalizePositiveNumber(value: unknown, fallback: number) {
 }
 
 function shouldDropFailedEvent(message: string) {
-  return message.includes("400: {\"error\":\"Invalid order payload\"}");
+  return message.includes("400: {\"error\":\"Invalid order payload\"}")
+    || message.includes("404: {\"error\":\"Order not found\"}")
+    || message.includes("\"error\":\"Order not found\"")
+    || message.includes("failed with 404");
 }
 
 function normalizeEmail(email: string) {

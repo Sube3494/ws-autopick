@@ -255,17 +255,17 @@ function normalizeFailedEventFilters(searchParams: URLSearchParams): FailedEvent
 
 function formatAdminDateTime(value: string | undefined) {
   const text = String(value || "").trim();
-  if (!text) return "-";
+  if (!text) return { dateLabel: "-", timeLabel: "-" };
 
   const date = new Date(text);
   if (Number.isNaN(date.getTime())) {
-    return text.replace("T", " ").replace("Z", "");
+    const normalized = text.replace("T", " ").replace("Z", "");
+    const [datePart, timePart] = normalized.split(" ");
+    return {
+      dateLabel: datePart || normalized,
+      timeLabel: timePart || "-",
+    };
   }
-
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const targetDay = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
-  const dayDiff = Math.round((targetDay - today) / 86400000);
 
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -274,12 +274,10 @@ function formatAdminDateTime(value: string | undefined) {
   const minutes = String(date.getMinutes()).padStart(2, "0");
   const seconds = String(date.getSeconds()).padStart(2, "0");
 
-  const timePart = `${hours}:${minutes}:${seconds}`;
-  if (dayDiff === 0) return `今天 ${timePart}`;
-  if (dayDiff === 1) return `明天 ${timePart}`;
-  if (dayDiff === -1) return `昨天 ${timePart}`;
-  if (year === now.getFullYear()) return `${month}-${day} ${timePart}`;
-  return `${year}-${month}-${day} ${timePart}`;
+  return {
+    dateLabel: `${year}-${month}-${day}`,
+    timeLabel: `${hours}:${minutes}:${seconds}`,
+  };
 }
 
 function formatFailedEventType(kind: FailedEventSummary["kind"]) {
@@ -327,12 +325,28 @@ function renderFailedEventError(lastError?: string) {
 function renderFailedEventRows(items: FailedEventSummary[]) {
   return items.map((item) => `
     <tr>
-      <td data-label="连接"><strong>${escapeHtml(item.sourceLabel)}</strong></td>
-      <td data-label="平台">${escapeHtml(item.platform)}</td>
-      <td data-label="单号"><code>${escapeHtml(item.orderNo)}</code></td>
+      <td data-label="连接">
+        <div class="cell-stack">
+          <strong>${escapeHtml(item.sourceLabel)}</strong>
+          <span class="cell-subtle">${escapeHtml(item.platform)}</span>
+        </div>
+      </td>
+      <td data-label="订单">
+        <div class="cell-stack">
+          <code>${escapeHtml(item.orderNo)}</code>
+          <span class="time-stack cell-subtle" title="${escapeHtml(String(item.nextRetryAt || ""))}">
+            <span>${escapeHtml(formatAdminDateTime(item.nextRetryAt).dateLabel)}</span>
+            <span>${escapeHtml(formatAdminDateTime(item.nextRetryAt).timeLabel)}</span>
+          </span>
+        </div>
+      </td>
       <td data-label="类型"><span class="kind-badge kind-${escapeHtml(item.kind)}">${escapeHtml(formatFailedEventType(item.kind))}</span></td>
-      <td data-label="重试次数"><span class="attempt-badge">${item.attempts}</span></td>
-      <td data-label="下次重试"><span class="retry-time" title="${escapeHtml(String(item.nextRetryAt || ""))}">${escapeHtml(formatAdminDateTime(item.nextRetryAt))}</span></td>
+      <td data-label="重试">
+        <div class="cell-stack">
+          <span class="attempt-badge">${item.attempts}</span>
+          <span class="retry-time">下次重试</span>
+        </div>
+      </td>
       <td data-label="最近错误">${renderFailedEventError(item.lastError)}</td>
     </tr>
   `).join("");
@@ -1132,10 +1146,21 @@ function renderFailedEventsPage(options: {
     .note { color: var(--text-muted); font-size: 13px; line-height: 1.7; }
     .warning { margin-bottom: 18px; padding: 14px 16px; border-radius: 16px; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.2); color: #ef4444; font-weight: 500; }
     .table-wrap { overflow: auto; border: 1px solid var(--panel-border); border-radius: 24px; background: var(--row-bg); }
-    table { width: 100%; min-width: 980px; border-collapse: collapse; }
+    table { width: 100%; min-width: 860px; border-collapse: collapse; table-layout: fixed; }
     th, td { text-align: left; padding: 14px 16px; border-bottom: 1px solid var(--divider); font-size: 13px; vertical-align: top; }
     th { color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; background: rgba(255,255,255,0.02); }
     td code { font-family: Consolas, monospace; font-size: 12px; }
+    th:nth-child(1), td:nth-child(1) { width: 120px; }
+    th:nth-child(2), td:nth-child(2) { width: 230px; }
+    th:nth-child(3), td:nth-child(3) { width: 110px; }
+    th:nth-child(4), td:nth-child(4) { width: 120px; }
+    .cell-stack { display: grid; gap: 6px; min-width: 0; }
+    .cell-subtle {
+      color: var(--text-muted);
+      font-size: 12px;
+      line-height: 1.4;
+      word-break: break-word;
+    }
     .kind-badge, .attempt-badge, .error-badge {
       display: inline-flex;
       align-items: center;
@@ -1162,10 +1187,17 @@ function renderFailedEventsPage(options: {
     }
     .retry-time {
       color: var(--text-main);
-      white-space: nowrap;
+      white-space: normal;
       font-variant-numeric: tabular-nums;
+      font-size: 12px;
     }
-    .error-stack { display: grid; gap: 8px; max-width: 620px; }
+    .time-stack {
+      display: grid;
+      gap: 2px;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.35;
+    }
+    .error-stack { display: grid; gap: 8px; max-width: 100%; }
     .error-summary { font-weight: 700; line-height: 1.5; }
     .error-meta {
       display: flex;
@@ -1480,11 +1512,9 @@ function renderFailedEventsPage(options: {
             <thead>
               <tr>
                 <th>连接</th>
-                <th>平台</th>
-                <th>单号</th>
+                <th>订单</th>
                 <th>类型</th>
-                <th>重试次数</th>
-                <th>下次重试</th>
+                <th>重试</th>
                 <th>最近错误</th>
               </tr>
             </thead>
