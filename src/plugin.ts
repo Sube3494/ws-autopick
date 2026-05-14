@@ -226,7 +226,7 @@ export class PluginRuntime {
     const connection = this.requireConnectionByApiKey(apiKey);
     const runner = this.runners.get(connection.id);
     if (runner) {
-      const pickDone = await runner.waitForPickingComplete(command.orderNo, 10_000);
+      const pickDone = await runner.waitForPickingComplete(command.orderNo, this.config.pickingWaitTimeoutMs);
       if (!pickDone) {
         return {
           ok: false,
@@ -353,6 +353,7 @@ export class PluginRuntime {
     this.config.wsHeartbeatIntervalMs = settings.wsHeartbeatIntervalMs;
     this.config.wsReconnectBaseMs = settings.wsReconnectBaseMs;
     this.config.wsReconnectMaxMs = settings.wsReconnectMaxMs;
+    this.config.pickingWaitTimeoutMs = settings.pickingWaitTimeoutMs;
     this.config.mealCompleteCooldownMs = settings.mealCompleteCooldownMs;
     this.config.statuses = settings.statuses;
   }
@@ -374,6 +375,7 @@ export class PluginRuntime {
       wsHeartbeatIntervalMs: normalizePositiveNumber(input.wsHeartbeatIntervalMs, this.config.wsHeartbeatIntervalMs),
       wsReconnectBaseMs: normalizePositiveNumber(input.wsReconnectBaseMs, this.config.wsReconnectBaseMs),
       wsReconnectMaxMs: normalizePositiveNumber(input.wsReconnectMaxMs, this.config.wsReconnectMaxMs),
+      pickingWaitTimeoutMs: normalizePositiveNumber(input.pickingWaitTimeoutMs, this.config.pickingWaitTimeoutMs),
       mealCompleteCooldownMs: normalizePositiveNumber(input.mealCompleteCooldownMs, this.config.mealCompleteCooldownMs),
       statuses: statuses.length > 0 ? statuses : this.config.statuses,
     };

@@ -658,6 +658,8 @@ function renderDashboardPage(data: DashboardData, currentUser: AuthUser, message
           <div><label>WS 心跳 (ms)</label><input name="wsHeartbeatIntervalMs" value="${data.settings.wsHeartbeatIntervalMs}" /></div>
           <div><label>WS 重连基准 (ms)</label><input name="wsReconnectBaseMs" value="${data.settings.wsReconnectBaseMs}" /></div>
           <div><label>WS 重连上限 (ms)</label><input name="wsReconnectMaxMs" value="${data.settings.wsReconnectMaxMs}" /></div>
+          <div><label>拣货等待超时 (秒)</label><input name="pickingWaitTimeoutSeconds" value="${Math.max(1, Math.round(data.settings.pickingWaitTimeoutMs / 1000))}" /></div>
+          <div><label>拣货完成冷却 (秒)</label><input name="mealCompleteCooldownSeconds" value="${Math.max(1, Math.round(data.settings.mealCompleteCooldownMs / 1000))}" /></div>
           <div class="full"><label>轮询状态列表</label><input name="statuses" value="${escapeHtml(data.settings.statuses.join(","))}" /></div>
           <div class="full" style="display: flex; justify-content: flex-end; margin-top: 16px;">
             <button type="submit" class="primary" style="width: auto;">保存运行设置</button>
@@ -1467,7 +1469,8 @@ function parseSettings(body: Record<string, string>, current: RuntimeSettings): 
     wsHeartbeatIntervalMs: Number(body.wsHeartbeatIntervalMs || current.wsHeartbeatIntervalMs),
     wsReconnectBaseMs: Number(body.wsReconnectBaseMs || current.wsReconnectBaseMs),
     wsReconnectMaxMs: Number(body.wsReconnectMaxMs || current.wsReconnectMaxMs),
-    mealCompleteCooldownMs: Number(body.mealCompleteCooldownMs || current.mealCompleteCooldownMs),
+    pickingWaitTimeoutMs: Number(body.pickingWaitTimeoutSeconds || Math.round(current.pickingWaitTimeoutMs / 1000)) * 1000,
+    mealCompleteCooldownMs: Number(body.mealCompleteCooldownSeconds || Math.round(current.mealCompleteCooldownMs / 1000)) * 1000,
     statuses: String(body.statuses || current.statuses.join(",")).split(",").map((item) => item.trim()).filter(Boolean),
   };
 }

@@ -33,6 +33,7 @@ export type AppConfig = {
   wsHeartbeatIntervalMs: number;
   wsReconnectBaseMs: number;
   wsReconnectMaxMs: number;
+  pickingWaitTimeoutMs: number;
   mealCompleteCooldownMs: number;
 };
 
@@ -48,6 +49,7 @@ export type RuntimeSettings = {
   wsHeartbeatIntervalMs: number;
   wsReconnectBaseMs: number;
   wsReconnectMaxMs: number;
+  pickingWaitTimeoutMs: number;
   mealCompleteCooldownMs: number;
   statuses: string[];
 };

@@ -446,6 +446,7 @@ export class AppDatabase {
       wsHeartbeatIntervalMs: Number(map.get("wsHeartbeatIntervalMs") || 30000),
       wsReconnectBaseMs: Number(map.get("wsReconnectBaseMs") || 1000),
       wsReconnectMaxMs: Number(map.get("wsReconnectMaxMs") || 30000),
+      pickingWaitTimeoutMs: Number(map.get("pickingWaitTimeoutMs") || 10000),
       mealCompleteCooldownMs: Number(map.get("mealCompleteCooldownMs") || 600000),
       statuses: JSON.parse(map.get("statuses") || "[]"),
     };
@@ -465,6 +466,7 @@ export class AppDatabase {
       ["wsHeartbeatIntervalMs", String(input.wsHeartbeatIntervalMs)],
       ["wsReconnectBaseMs", String(input.wsReconnectBaseMs)],
       ["wsReconnectMaxMs", String(input.wsReconnectMaxMs)],
+      ["pickingWaitTimeoutMs", String(input.pickingWaitTimeoutMs)],
       ["mealCompleteCooldownMs", String(input.mealCompleteCooldownMs)],
       ["statuses", JSON.stringify(input.statuses)],
     ];
@@ -551,6 +553,7 @@ export class AppDatabase {
       wsHeartbeatIntervalMs: config.wsHeartbeatIntervalMs,
       wsReconnectBaseMs: config.wsReconnectBaseMs,
       wsReconnectMaxMs: config.wsReconnectMaxMs,
+      pickingWaitTimeoutMs: config.pickingWaitTimeoutMs,
       mealCompleteCooldownMs: config.mealCompleteCooldownMs,
       statuses: config.statuses,
     };

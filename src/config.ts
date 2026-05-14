@@ -57,6 +57,7 @@ export function loadConfig(cwd: string): AppConfig {
     wsHeartbeatIntervalMs: readNumber(process.env.WS_HEARTBEAT_INTERVAL_MS, 30000),
     wsReconnectBaseMs: readNumber(process.env.WS_RECONNECT_BASE_MS, 1000),
     wsReconnectMaxMs: readNumber(process.env.WS_RECONNECT_MAX_MS, 30000),
+    pickingWaitTimeoutMs: readNumber(process.env.PICKING_WAIT_TIMEOUT_MS, 10000),
     mealCompleteCooldownMs: readNumber(process.env.MEAL_COMPLETE_COOLDOWN_MS, 10 * 60 * 1000),
   };
 }
