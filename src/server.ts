@@ -253,16 +253,87 @@ function normalizeFailedEventFilters(searchParams: URLSearchParams): FailedEvent
   };
 }
 
+function formatAdminDateTime(value: string | undefined) {
+  const text = String(value || "").trim();
+  if (!text) return "-";
+
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) {
+    return text.replace("T", " ").replace("Z", "");
+  }
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const targetDay = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const dayDiff = Math.round((targetDay - today) / 86400000);
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  const seconds = String(date.getSeconds()).padStart(2, "0");
+
+  const timePart = `${hours}:${minutes}:${seconds}`;
+  if (dayDiff === 0) return `今天 ${timePart}`;
+  if (dayDiff === 1) return `明天 ${timePart}`;
+  if (dayDiff === -1) return `昨天 ${timePart}`;
+  if (year === now.getFullYear()) return `${month}-${day} ${timePart}`;
+  return `${year}-${month}-${day} ${timePart}`;
+}
+
+function formatFailedEventType(kind: FailedEventSummary["kind"]) {
+  if (kind === "progress") return "进度";
+  if (kind === "upsert") return "更新";
+  if (kind === "delete") return "删除";
+  return kind;
+}
+
+function renderFailedEventError(lastError?: string) {
+  const raw = String(lastError || "").trim();
+  if (!raw) {
+    return `<span class="error-empty">-</span>`;
+  }
+
+  const statusMatch = raw.match(/failed with (\d{3})/i) || raw.match(/\bstatus(?:Code)?[=: ]+(\d{3})\b/i);
+  const statusCode = statusMatch?.[1] || "";
+  const methodMatch = raw.match(/\b(GET|POST|PUT|PATCH|DELETE)\s+([^\s]+?)(?::\s| failed|\swith|\srequest|\safter|$)/i);
+  const method = methodMatch?.[1]?.toUpperCase() || "";
+  const endpoint = methodMatch?.[2] || "";
+  const jsonErrorMatch = raw.match(/"error"\s*:\s*"([^"]+)"/i);
+  const plainErrorMatch = raw.match(/"message"\s*:\s*"([^"]+)"/i);
+  const summary = jsonErrorMatch?.[1]
+    || plainErrorMatch?.[1]
+    || (statusCode ? `请求失败 ${statusCode}` : raw.slice(0, 120));
+
+  return `
+    <div class="error-stack">
+      <div class="error-summary">${escapeHtml(summary)}</div>
+      ${(statusCode || method || endpoint) ? `
+        <div class="error-meta">
+          ${statusCode ? `<span class="error-badge">${escapeHtml(statusCode)}</span>` : ""}
+          ${method ? `<span class="error-method">${escapeHtml(method)}</span>` : ""}
+          ${endpoint ? `<code class="error-endpoint">${escapeHtml(endpoint)}</code>` : ""}
+        </div>
+      ` : ""}
+      <details class="error-raw">
+        <summary>查看原始错误</summary>
+        <pre>${escapeHtml(raw)}</pre>
+      </details>
+    </div>
+  `;
+}
+
 function renderFailedEventRows(items: FailedEventSummary[]) {
   return items.map((item) => `
     <tr>
-      <td data-label="连接">${escapeHtml(item.sourceLabel)}</td>
+      <td data-label="连接"><strong>${escapeHtml(item.sourceLabel)}</strong></td>
       <td data-label="平台">${escapeHtml(item.platform)}</td>
       <td data-label="单号"><code>${escapeHtml(item.orderNo)}</code></td>
-      <td data-label="类型">${escapeHtml(item.kind)}</td>
-      <td data-label="重试次数">${item.attempts}</td>
-      <td data-label="下次重试">${escapeHtml(item.nextRetryAt)}</td>
-      <td data-label="最近错误">${escapeHtml(item.lastError || "-")}</td>
+      <td data-label="类型"><span class="kind-badge kind-${escapeHtml(item.kind)}">${escapeHtml(formatFailedEventType(item.kind))}</span></td>
+      <td data-label="重试次数"><span class="attempt-badge">${item.attempts}</span></td>
+      <td data-label="下次重试"><span class="retry-time" title="${escapeHtml(String(item.nextRetryAt || ""))}">${escapeHtml(formatAdminDateTime(item.nextRetryAt))}</span></td>
+      <td data-label="最近错误">${renderFailedEventError(item.lastError)}</td>
     </tr>
   `).join("");
 }
@@ -1065,6 +1136,91 @@ function renderFailedEventsPage(options: {
     th, td { text-align: left; padding: 14px 16px; border-bottom: 1px solid var(--divider); font-size: 13px; vertical-align: top; }
     th { color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; background: rgba(255,255,255,0.02); }
     td code { font-family: Consolas, monospace; font-size: 12px; }
+    .kind-badge, .attempt-badge, .error-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 28px;
+      padding: 0 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    .kind-badge {
+      background: rgba(255,255,255,0.08);
+      box-shadow: inset 0 0 0 1px var(--panel-border);
+      color: var(--text-main);
+    }
+    .kind-progress { color: #38bdf8; background: rgba(56,189,248,0.12); box-shadow: inset 0 0 0 1px rgba(56,189,248,0.22); }
+    .kind-upsert { color: #22c55e; background: rgba(34,197,94,0.12); box-shadow: inset 0 0 0 1px rgba(34,197,94,0.22); }
+    .kind-delete { color: #f97316; background: rgba(249,115,22,0.12); box-shadow: inset 0 0 0 1px rgba(249,115,22,0.22); }
+    .attempt-badge {
+      min-width: 44px;
+      background: rgba(255,255,255,0.08);
+      box-shadow: inset 0 0 0 1px var(--panel-border);
+    }
+    .retry-time {
+      color: var(--text-main);
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+    .error-stack { display: grid; gap: 8px; max-width: 620px; }
+    .error-summary { font-weight: 700; line-height: 1.5; }
+    .error-meta {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .error-badge {
+      color: #fda4af;
+      background: rgba(244,63,94,0.12);
+      box-shadow: inset 0 0 0 1px rgba(244,63,94,0.22);
+    }
+    .error-method {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .error-endpoint {
+      display: inline-block;
+      max-width: 100%;
+      padding: 4px 8px;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.06);
+      box-shadow: inset 0 0 0 1px var(--panel-border);
+      white-space: normal;
+      word-break: break-all;
+    }
+    .error-raw {
+      border-radius: 14px;
+      background: rgba(255,255,255,0.04);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
+      overflow: hidden;
+    }
+    .error-raw summary {
+      cursor: pointer;
+      padding: 10px 12px;
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 700;
+      list-style: none;
+    }
+    .error-raw summary::-webkit-details-marker { display: none; }
+    .error-raw pre {
+      margin: 0;
+      padding: 0 12px 12px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      color: var(--text-muted);
+    }
+    .error-empty { color: var(--text-muted); }
     .empty { padding: 28px; color: var(--text-muted); text-align: center; }
     .theme-toggle { white-space: nowrap; }
     @media (max-width: 1100px) {
