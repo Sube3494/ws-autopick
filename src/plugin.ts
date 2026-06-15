@@ -267,6 +267,10 @@ export class PluginRuntime {
     await this.reloadConnections();
   }
 
+  async deleteFailedEvent(id: string) {
+    await this.failedStore.markSucceeded(id);
+  }
+
   touchApiKey(apiKey: string) {
     this.database.touchApiKey(apiKey);
   }
