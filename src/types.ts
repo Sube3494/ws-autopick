@@ -125,6 +125,7 @@ export type MainSystemOrderPayload = {
     pickupTime?: string;
     track?: string;
     riderName?: string;
+    riderPhone?: string;
   };
   items: Array<{
     productName: string;
@@ -132,6 +133,14 @@ export type MainSystemOrderPayload = {
     quantity: number;
     thumb?: string;
   }>;
+  unencryptedPhone?: string;
+  unencryptedAddress?: string;
+  unencryptedMapAddress?: string;
+  customerName?: string;
+  customerPhone?: string;
+  customerMaskedPhone?: string;
+  customerPhoneExtension?: string;
+  customerRemark?: string;
 };
 
 export type MaiyatianOrderSummary = {
@@ -223,6 +232,7 @@ export type MaiyatianOrderDetail = {
     delivery_name?: string;
     finished_time?: string | number;
     shop_id?: string | number;
+    delivery_phone?: string;
   } | false;
   is_cancel?: string | number | boolean;
   cancel_status?: string | number;

@@ -688,6 +688,7 @@ function toMainSystemPayload(detail: MaiyatianOrderDetail, platform: string): Ma
       pickupTime: normalizeTime(delivery.pickup_time),
       track: String(delivery.track || "").trim() || undefined,
       riderName: String(delivery.delivery_name || "").trim() || undefined,
+      riderPhone: String(delivery.delivery_phone || "").trim() || undefined,
     } : undefined,
     items: Array.isArray(detail.goods)
       ? detail.goods.map((item) => ({
@@ -697,6 +698,14 @@ function toMainSystemPayload(detail: MaiyatianOrderDetail, platform: string): Ma
           thumb: String(item.thumb || "").trim() || undefined,
         })).filter((item) => item.productName)
       : [],
+    customerRemark: String(detail.user_remark || detail.remark || "").trim() || undefined,
+    unencryptedPhone: String(detail.unencrypted_phone || "").trim() || undefined,
+    unencryptedAddress: String(detail.unencrypted_address || "").trim() || undefined,
+    unencryptedMapAddress: String(detail.unencrypted_map_address || "").trim() || undefined,
+    customerName: String(detail.real_name || detail.realName || detail.nick_name || detail.nickName || "").trim() || undefined,
+    customerPhone: String(detail.unencrypted_phone || detail.phone || "").trim() || undefined,
+    customerMaskedPhone: String(detail.secret_phone || "").trim() || undefined,
+    customerPhoneExtension: String(detail.phone_extend || "").trim() || undefined,
   };
 }
 
