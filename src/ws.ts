@@ -185,7 +185,30 @@ function parseWsNotify(input: unknown): WsNotifyEvent {
   }
 
   if (cmd === "expect") {
-    return { kind: "ignore", reason: "expect-ignored", raw: input };
+    const text = String(message.msg || "").trim();
+    if (!text) {
+      return { kind: "ignore", reason: "expect-empty-msg", raw: input };
+    }
+    let nested: unknown;
+    try {
+      nested = JSON.parse(text);
+    } catch {
+      return { kind: "ignore", reason: "expect-invalid-json", raw: input };
+    }
+    if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+      const body = nested as Record<string, unknown>;
+      const orderId = String(body.id || "").trim();
+      const statusHint = String(body.type || "expect").trim().toLowerCase();
+      if (orderId) {
+        return {
+          kind: "detail",
+          orderId,
+          statusHint,
+          raw: nested,
+        };
+      }
+    }
+    return { kind: "ignore", reason: "expect-missing-id", raw: input };
   }
 
   return { kind: "ignore", reason: `unsupported-cmd:${cmd}`, raw: input };
