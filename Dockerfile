@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM oven/bun:1.2.15 AS builder
+FROM oven/bun:alpine AS builder
 WORKDIR /app
 
 COPY package.json bun.lock tsconfig.json ./
@@ -9,7 +9,7 @@ RUN bun install --frozen-lockfile
 COPY src ./src
 RUN bun run build
 
-FROM oven/bun:1.2.15 AS runner
+FROM oven/bun:alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
