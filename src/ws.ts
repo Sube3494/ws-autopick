@@ -166,7 +166,7 @@ function parseWsNotify(input: unknown): WsNotifyEvent {
   }
 
   const message = input as Record<string, unknown>;
-  const cmd = String(message.cmd || "").trim();
+  const cmd = String(message.cmd || "").trim().toLowerCase();
   if (cmd === "") {
     const progress = parseProgressText(String(message.msg || "").trim());
     return progress || { kind: "ignore", reason: "empty-cmd", raw: input };
@@ -176,8 +176,10 @@ function parseWsNotify(input: unknown): WsNotifyEvent {
     return { kind: "ignore", reason: cmd, raw: input };
   }
 
-  if (cmd === "notify") {
-    const nested = parseNestedNotify(message.msg);
+  const isCancelCmd = cmd.includes("cancel") || cmd.includes("refund") || cmd.includes("close") || cmd === "order_change";
+
+  if (cmd === "notify" || isCancelCmd || cmd === "order_status") {
+    const nested = parseNestedNotify(message.msg, cmd);
     if (!nested) {
       return { kind: "ignore", reason: "notify-missing-body", raw: input };
     }
@@ -189,16 +191,18 @@ function parseWsNotify(input: unknown): WsNotifyEvent {
     if (!text) {
       return { kind: "ignore", reason: "expect-empty-msg", raw: input };
     }
-    let nested: unknown;
-    try {
-      nested = JSON.parse(text);
-    } catch {
-      return { kind: "ignore", reason: "expect-invalid-json", raw: input };
+    let nested: unknown = message.msg;
+    if (typeof text === "string" && text.startsWith("{")) {
+      try {
+        nested = JSON.parse(text);
+      } catch {
+        return { kind: "ignore", reason: "expect-invalid-json", raw: input };
+      }
     }
     if (nested && typeof nested === "object" && !Array.isArray(nested)) {
       const body = nested as Record<string, unknown>;
-      const orderId = String(body.id || "").trim();
-      const statusHint = String(body.type || "expect").trim().toLowerCase();
+      const orderId = String(body.id || body.order_id || body.orderId || body.source_id || "").trim();
+      const statusHint = normalizeNotifyStatusHint(body.type || body.cancel_status || body.status || "expect");
       if (orderId) {
         return {
           kind: "detail",
@@ -214,15 +218,18 @@ function parseWsNotify(input: unknown): WsNotifyEvent {
   return { kind: "ignore", reason: `unsupported-cmd:${cmd}`, raw: input };
 }
 
-function parseNestedNotify(value: unknown): WsNotifyEvent | null {
-  const text = String(value || "").trim();
-  if (!text) return null;
+function parseNestedNotify(value: unknown, parentCmd?: string): WsNotifyEvent | null {
+  if (!value) return null;
 
-  let nested: unknown;
-  try {
-    nested = JSON.parse(text);
-  } catch {
-    return { kind: "ignore", reason: "notify-invalid-json", raw: value };
+  let nested: unknown = value;
+  if (typeof value === "string") {
+    const text = value.trim();
+    if (!text) return null;
+    try {
+      nested = JSON.parse(text);
+    } catch {
+      return { kind: "ignore", reason: "notify-invalid-json", raw: value };
+    }
   }
 
   if (!nested || typeof nested !== "object" || Array.isArray(nested)) {
@@ -230,8 +237,29 @@ function parseNestedNotify(value: unknown): WsNotifyEvent | null {
   }
 
   const body = nested as Record<string, unknown>;
-  const orderId = String(body.id || "").trim();
-  const statusHint = normalizeNotifyStatusHint(body.type);
+  const orderId = String(body.id || body.order_id || body.orderId || body.source_id || "").trim();
+  
+  const rawStatusCandidates = [
+    body.type,
+    body.cancel_status,
+    body.cancelStatus,
+    body.status,
+    body.action,
+    body.event_type,
+    body.eventType,
+    parentCmd,
+  ];
+
+  let statusHint = "";
+  for (const candidate of rawStatusCandidates) {
+    statusHint = normalizeNotifyStatusHint(candidate);
+    if (statusHint) break;
+  }
+
+  if (!statusHint && parentCmd && (parentCmd.includes("cancel") || parentCmd.includes("refund"))) {
+    statusHint = "cancel";
+  }
+
   if (!orderId || !statusHint) {
     return { kind: "ignore", reason: "notify-missing-id-or-type", raw: nested };
   }
@@ -245,8 +273,21 @@ function parseNestedNotify(value: unknown): WsNotifyEvent | null {
 }
 
 function normalizeNotifyStatusHint(value: unknown) {
-  const raw = String(value || "").trim().toLowerCase();
+  const raw = String(value ?? "").trim().toLowerCase();
   if (!raw) return "";
+  if (
+    raw.includes("cancel") ||
+    raw.includes("refund") ||
+    raw.includes("close") ||
+    raw.includes("rollback") ||
+    raw.includes("取消") ||
+    raw.includes("退款") ||
+    raw.includes("关闭") ||
+    raw === "99" ||
+    raw === "10"
+  ) {
+    return "cancel";
+  }
   return raw;
 }
 

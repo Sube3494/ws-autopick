@@ -351,6 +351,11 @@ export class MaiyatianClient {
       };
     }
 
+    const payload = toMainSystemPayload(detail, platform);
+    if (status.value === "cancel") {
+      payload.status = "已取消";
+    }
+
     return {
       kind: "upsert",
       sourceLabel: this.user.label,
@@ -358,7 +363,7 @@ export class MaiyatianClient {
       eventId,
       platform,
       orderNo,
-      payload: toMainSystemPayload(detail, platform),
+      payload,
       rawPayload: detail,
     };
   }
@@ -738,32 +743,28 @@ function normalizePlatformName(platform: string) {
 function resolveStatus(detail: MaiyatianOrderDetail, statusHint: string) {
   const rawStatus = String(detail.status || "").trim().toLowerCase();
   const deliveryTrack = String(detail.delivery && typeof detail.delivery === "object" ? detail.delivery.track || "" : "").trim();
-  const isCancelled = isTruthy(detail.is_cancel) || String(detail.cancel_status || "").trim() !== "" && String(detail.cancel_status) !== "0";
+  const isCancelled = isTruthy(detail.is_cancel) || (String(detail.cancel_status || "").trim() !== "" && String(detail.cancel_status) !== "0");
   const deletedByStatus = ["deleted", "delete"].includes(rawStatus) || /删除/.test(deliveryTrack);
   const cancelledByStatus = ["cancel", "cancelled", "canceled", "close", "closed"].includes(rawStatus) || /取消|撤销|回滚/.test(deliveryTrack);
+  const normalizedHint = String(statusHint || "").trim().toLowerCase();
+  const isHintCancel = normalizedHint === "cancel" || normalizedHint === "refund" || normalizedHint === "close" || normalizedHint === "closed" || normalizedHint === "rollback";
 
-  if (deletedByStatus || statusHint === "delete") {
+  if (deletedByStatus || normalizedHint === "delete" || normalizedHint === "deleted" || normalizedHint === "remove") {
     return { kind: "delete" as const, value: rawStatus || "delete" };
   }
 
-  if (isCancelled || cancelledByStatus || statusHint === "cancel" || statusHint === "rollback") {
-    return { kind: "upsert" as const, value: rawStatus || "cancel" };
+  if (isCancelled || cancelledByStatus || isHintCancel) {
+    return { kind: "upsert" as const, value: "cancel" };
   }
 
-  if (statusHint === "close" || statusHint === "closed") {
-    return { kind: "upsert" as const, value: rawStatus || "cancel" };
-  }
-
-  if (statusHint === "deleted" || statusHint === "remove") {
-    return { kind: "delete" as const, value: rawStatus || "cancel" };
-  }
-
-  return { kind: "upsert" as const, value: rawStatus || statusHint || "confirm" };
+  return { kind: "upsert" as const, value: rawStatus || normalizedHint || "confirm" };
 }
 
 function describeStatus(detail: MaiyatianOrderDetail) {
   const rawStatus = String(detail.status || "").trim();
   const deliveryTrack = String(detail.delivery && typeof detail.delivery === "object" ? detail.delivery.track || "" : "").trim();
+  const isCancelled = isTruthy(detail.is_cancel) || (String(detail.cancel_status || "").trim() !== "" && String(detail.cancel_status) !== "0");
+  if (isCancelled) return "已取消";
   if (deliveryTrack) return deliveryTrack;
   return rawStatus || undefined;
 }
