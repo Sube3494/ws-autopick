@@ -733,10 +733,12 @@ function inferPlatform(
 function normalizePlatformName(platform: string) {
   const normalized = String(platform || "").trim();
   if (!normalized) return "";
+  const lower = normalized.toLowerCase();
   if (normalized === "淘宝闪购") return "淘宝";
-  if (normalized === "meituan") return "美团";
-  if (normalized === "jd") return "京东";
-  if (normalized === "taobao") return "淘宝";
+  if (lower === "meituan") return "美团";
+  if (lower === "jd") return "京东";
+  if (lower === "taobao") return "淘宝";
+  if (lower === "other" || normalized === "其它" || normalized === "其他" || normalized === "线下交易") return "线下交易";
   return normalized;
 }
 
