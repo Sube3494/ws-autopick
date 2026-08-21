@@ -84,6 +84,9 @@ export type DeliveryEvent =
       eventId: string;
       platform: string;
       orderNo: string;
+      sourceId?: string;
+      dailyPlatformSequence?: number;
+      deliveryId?: string;
       progress: {
         pickCompleted?: boolean;
         pickRemainingSeconds?: number;

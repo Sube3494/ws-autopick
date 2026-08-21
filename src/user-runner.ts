@@ -244,8 +244,12 @@ export class UserRunner {
           eventId: `${this.user.label}:${orderId}:progress:pickCompleted`,
           platform,
           orderNo,
+          sourceId: identity.sourceId || orderId,
+          dailyPlatformSequence: identity.dailyPlatformSequence,
+          deliveryId: identity.deliveryId,
           progress: {
             pickCompleted: true,
+            statusHint: "meal",
           },
           rawPayload,
         };
@@ -271,6 +275,9 @@ export class UserRunner {
       eventId: `${this.user.label}:${orderId}:progress:status:${statusHint}`,
       platform: identity.platform,
       orderNo: identity.orderNo,
+      sourceId: identity.sourceId || orderId,
+      dailyPlatformSequence: identity.dailyPlatformSequence,
+      deliveryId: identity.deliveryId,
       progress: {
         statusHint,
       },
@@ -343,8 +350,12 @@ export class UserRunner {
         eventId: `${this.user.label}:${sourceId}:progress:mealComplete`,
         platform: event.platform,
         orderNo: event.orderNo,
+        sourceId,
+        dailyPlatformSequence: event.payload.dailyPlatformSequence,
+        deliveryId: event.payload.deliveryId,
         progress: {
           pickCompleted: true,
+          statusHint: "meal",
         },
         rawPayload: result,
       });

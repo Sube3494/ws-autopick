@@ -11,6 +11,9 @@ export class MainSystemClient {
       return this.post("/api/v1/api-key/listened-orders/progress", event.apiKey, {
         platform: event.platform,
         orderNo: event.orderNo,
+        sourceId: event.sourceId,
+        dailyPlatformSequence: event.dailyPlatformSequence,
+        deliveryId: event.deliveryId,
         ...event.progress,
       });
     }
