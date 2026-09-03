@@ -144,6 +144,8 @@ export type MainSystemOrderPayload = {
   customerMaskedPhone?: string;
   customerPhoneExtension?: string;
   customerRemark?: string;
+  customerType?: "new" | "returning";
+  rawPayload?: unknown;
 };
 
 export type MaiyatianOrderSummary = {

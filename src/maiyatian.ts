@@ -659,6 +659,7 @@ function toMainSystemPayload(detail: MaiyatianOrderDetail, platform: string): Ma
   const fallbackUserAddress = mapAddress || shopAddress || String(detail.delivery_time_format || "").trim() || "到店自提";
   const delivery = detail.delivery && typeof detail.delivery === "object" ? detail.delivery : null;
   const fee = detail.fee && typeof detail.fee === "object" ? detail.fee : null;
+  const customerType = readCustomerType(detail);
 
   return {
     id: String(detail.id || "").trim(),
@@ -711,7 +712,42 @@ function toMainSystemPayload(detail: MaiyatianOrderDetail, platform: string): Ma
     customerPhone: String(detail.unencrypted_phone || detail.phone || "").trim() || undefined,
     customerMaskedPhone: String(detail.secret_phone || "").trim() || undefined,
     customerPhoneExtension: String(detail.phone_extend || "").trim() || undefined,
+    customerType: customerType || undefined,
+    rawPayload: detail,
   };
+}
+
+function readCustomerType(detail: MaiyatianOrderDetail): "new" | "returning" | null {
+  const fee = detail.fee && typeof detail.fee === "object" ? detail.fee as Record<string, unknown> : null;
+  const candidates = [
+    detail.customerType,
+    detail.customer_type,
+    detail.userType,
+    detail.user_type,
+    detail.buyerType,
+    detail.buyer_type,
+    detail.isFirst,
+    detail.is_first,
+    fee?.isFirst,
+    fee?.is_first,
+  ];
+
+  for (const candidate of candidates) {
+    const value = String(candidate ?? "").trim().toLowerCase();
+    if (!value) continue;
+    if (["1", "true", "yes", "new", "first", "first_order", "new_customer"].includes(value) || value.includes("新客")) {
+      return "new";
+    }
+    if (["0", "false", "no", "old", "returning", "repeat", "regular"].includes(value) || value.includes("老客")) {
+      return "returning";
+    }
+  }
+
+  const extras = fee?.extras ?? detail.extras;
+  const extrasText = typeof extras === "string" ? extras : JSON.stringify(extras || "");
+  if (/新客|首单|首次/.test(extrasText)) return "new";
+  if (/老客|复购/.test(extrasText)) return "returning";
+  return null;
 }
 
 function inferPlatform(
