@@ -690,7 +690,15 @@ function toMainSystemPayload(detail: MaiyatianOrderDetail, platform: string): Ma
     platformCommission: toFen(fee?.commission),
     delivery: delivery ? {
       logisticName: String(delivery.logistic_name || delivery.delivery_name || "").trim() || undefined,
-      sendFee: toFen(delivery.send_fee),
+      sendFee: toFen(
+        delivery.send_fee
+        ?? (delivery as Record<string, unknown>).delivery_fee
+        ?? (delivery as Record<string, unknown>).carrier_fee
+        ?? (delivery as Record<string, unknown>).actual_fee
+        ?? (delivery as Record<string, unknown>).fee
+        ?? (detail.fee as Record<string, unknown> | undefined)?.delivery_fee
+        ?? (detail as Record<string, unknown>).delivery_fee
+      ),
       pickupTime: normalizeTime(delivery.pickup_time),
       track: String(delivery.track || "").trim() || undefined,
       riderName: String(delivery.delivery_name || "").trim() || undefined,
