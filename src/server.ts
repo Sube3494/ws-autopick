@@ -463,9 +463,9 @@ export function createServer(runtime: PluginRuntime) {
         const logisticId = String(body.logisticId || "").trim();
         const logisticTag = String(body.logisticTag || "").trim();
         const servicePkg = String(body.servicePkg || "").trim();
-        if (!orderNo || !platform || !Number.isFinite(dailyPlatformSequence) || dailyPlatformSequence <= 0 || !logisticId || !logisticTag) {
+        if (!sourceId || !logisticId || !logisticTag) {
           response.writeHead(400, { "Content-Type": "application/json" });
-          response.end(JSON.stringify({ ok: false, error: "platform, dailyPlatformSequence, orderNo, sourceId, logisticId and logisticTag are required" }));
+          response.end(JSON.stringify({ ok: false, error: "sourceId, logisticId and logisticTag are required" }));
           return;
         }
 

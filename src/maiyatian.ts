@@ -219,7 +219,8 @@ export class MaiyatianClient {
       doorService: "0",
     }).toString();
 
-    const response = await this.postForm(SELF_DELIVERY_SUBMIT_URL, body);
+    const token = this.requireToken();
+    const response = await this.postForm(`${SELF_DELIVERY_SUBMIT_URL}&token=${encodeURIComponent(token)}`, body);
     const text = await response.text();
     let parsed: Record<string, unknown> | null = null;
     try {
@@ -319,7 +320,8 @@ export class MaiyatianClient {
       doorService: "0",
     }).toString();
 
-    const response = await this.postForm(SELF_DELIVERY_SUBMIT_URL, body);
+    const token = this.requireToken();
+    const response = await this.postForm(`${SELF_DELIVERY_SUBMIT_URL}&token=${encodeURIComponent(token)}`, body);
     const text = await response.text();
     let parsed: Record<string, unknown> | null = null;
     try {
@@ -328,11 +330,15 @@ export class MaiyatianClient {
       parsed = null;
     }
 
+    const errno = Number(parsed?.errno || 0);
+    const errorMessage = errno === 1 ? "" : String(parsed?.message || parsed?.text || text || "呼叫配送失败");
+
     return {
-      ok: response.ok && Number(parsed?.errno || 0) === 1,
-      status: response.ok ? (Number(parsed?.errno || 0) === 1 ? 200 : 409) : response.status,
+      ok: response.ok && errno === 1,
+      status: response.ok ? (errno === 1 ? 200 : 409) : response.status,
       parsed,
       text,
+      error: errorMessage || undefined,
       delivery: {
         logisticId: String(selected.id || ""),
         logisticTag: String(selected.tag || ""),
@@ -384,7 +390,8 @@ export class MaiyatianClient {
       logisticTag: "picker",
     }).toString();
 
-    const response = await this.postForm(SELF_DELIVERY_SUBMIT_URL, body);
+    const token = this.requireToken();
+    const response = await this.postForm(`${SELF_DELIVERY_SUBMIT_URL}&token=${encodeURIComponent(token)}`, body);
     const text = await response.text();
     let parsed: Record<string, unknown> | null = null;
     try {
@@ -455,7 +462,8 @@ export class MaiyatianClient {
       id: detailId,
     }).toString();
 
-    const response = await this.postForm(MEAL_COMPLETE_URL, body);
+    const token = this.requireToken();
+    const response = await this.postForm(`${MEAL_COMPLETE_URL}&token=${encodeURIComponent(token)}`, body);
     const text = await response.text();
     let parsed: Record<string, unknown> | null = null;
     try {
