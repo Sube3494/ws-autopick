@@ -1,4 +1,5 @@
 import { AppConfig, CompleteDeliveryCommand, DeliveryEvent, DeliveryOptionsCommand, DispatchDeliveryCommand, MainSystemOrderPayload, MaiyatianOrderDetail, MaiyatianOrderSummary, MaiyatianSessionIdentity, MealCompleteCommand, PickupCompleteCommand, SelfDeliveryCommand, UserConfig } from "./types.js";
+import { logger } from "./logger.js";
 
 const BASE_URL = "https://saas.maiyatian.com";
 const WS_URL = "wss://msg.maiyatian.com/acc";
@@ -269,11 +270,40 @@ export class MaiyatianClient {
     const quotes = await Promise.all(options.map(async (option) => {
       try {
         const quote = await this.fetchDeliveryQuote(detailId, option);
-        if (Number(quote.errno || 0) !== 1 || !quote.data?.preId) {
+        if (Number(quote.errno || 0) !== 1 || !quote.data) {
+          logger.warn("delivery quote unavailable", {
+            label: this.user.label,
+            sourceId: detailId,
+            logisticId: String(option.id || ""),
+            logisticTag: String(option.tag || ""),
+            logisticName: String(option.name || option.tag || "配送服务"),
+            servicePkg: String(option.service_pkg || ""),
+            mode: Number(option.mode || 0),
+            isJuhe: Number(option.mode || 0) === 2,
+            errno: Number(quote.errno || 0),
+            message: String(quote.message || ""),
+            hasPreId: Boolean(quote.data?.preId),
+            amount: quote.data?.amount,
+            fee: quote.data?.fee,
+          });
           return null;
         }
         const amountCents = normalizeDeliveryAmountCents(quote.data);
-        if (amountCents < 0) return null;
+        if (amountCents < 0) {
+          logger.warn("delivery quote has invalid amount", {
+            label: this.user.label,
+            sourceId: detailId,
+            logisticId: String(option.id || ""),
+            logisticTag: String(option.tag || ""),
+            logisticName: String(option.name || option.tag || "配送服务"),
+            servicePkg: String(option.service_pkg || ""),
+            mode: Number(option.mode || 0),
+            isJuhe: Number(option.mode || 0) === 2,
+            amount: quote.data?.amount,
+            fee: quote.data?.fee,
+          });
+          return null;
+        }
         return {
           logisticId: String(option.id || ""),
           logisticTag: String(option.tag || ""),
@@ -285,14 +315,34 @@ export class MaiyatianClient {
           distance: Number(quote.data.distance || 0),
           estimatedDeliveryTime: Number(quote.data.estimated_delivery_time || 0),
         };
-      } catch {
+      } catch (error) {
+        logger.warn("delivery quote request failed", {
+          label: this.user.label,
+          sourceId: detailId,
+          logisticId: String(option.id || ""),
+          logisticTag: String(option.tag || ""),
+          logisticName: String(option.name || option.tag || "配送服务"),
+          servicePkg: String(option.service_pkg || ""),
+          error: error instanceof Error ? error.message : String(error),
+        });
         return null;
       }
     }));
 
-    return quotes
+    const availableQuotes = quotes
       .filter((quote): quote is NonNullable<typeof quote> => Boolean(quote))
       .sort((a, b) => a.amount - b.amount || a.name.localeCompare(b.name, "zh-CN"));
+    logger.info("delivery quotes loaded", {
+      label: this.user.label,
+      sourceId: detailId,
+      candidateCount: options.length,
+      availableCount: availableQuotes.length,
+      unavailableCount: options.length - availableQuotes.length,
+      aggregateCandidateCount: options.filter((option) => Number(option.mode || 0) === 2).length,
+      accountCandidateCount: options.filter((option) => Number(option.mode || 0) !== 2).length,
+      availableNames: availableQuotes.map((quote) => quote.name),
+    });
+    return availableQuotes;
   }
 
   async submitThirdPartyDelivery(command: DispatchDeliveryCommand) {
@@ -312,7 +362,21 @@ export class MaiyatianClient {
     const quote = await this.fetchDeliveryQuote(detailId, selected);
     const amount = normalizeDeliveryAmountCents(quote.data);
     const preId = String(quote.data?.preId || "").trim();
-    if (Number(quote.errno || 0) !== 1 || !preId || amount < 0) {
+    if (Number(quote.errno || 0) !== 1 || !quote.data || amount < 0) {
+      logger.warn("delivery dispatch quote unavailable", {
+        label: this.user.label,
+        sourceId: detailId,
+        logisticId: String(selected.id || ""),
+        logisticTag: String(selected.tag || ""),
+        logisticName: String(selected.name || selected.tag || "配送服务"),
+        mode: Number(selected.mode || 0),
+        isJuhe: Number(selected.mode || 0) === 2,
+        errno: Number(quote.errno || 0),
+        message: String(quote.message || ""),
+        hasPreId: Boolean(preId),
+        amount: quote.data?.amount,
+        fee: quote.data?.fee,
+      });
       return { ok: false, status: 409, parsed: quote as unknown as Record<string, unknown>, text: String(quote.message || "delivery-quote-failed") };
     }
 
@@ -354,6 +418,20 @@ export class MaiyatianClient {
 
     const errno = Number(parsed?.errno || 0);
     const errorMessage = errno === 1 ? "" : String(parsed?.message || parsed?.text || text || "呼叫配送失败");
+    logger[response.ok && errno === 1 ? "info" : "warn"]("delivery dispatch completed", {
+      label: this.user.label,
+      sourceId: detailId,
+      logisticId: String(selected.id || ""),
+      logisticTag: String(selected.tag || ""),
+      logisticName: String(selected.name || selected.tag || "配送服务"),
+      mode: Number(selected.mode || 0),
+      isJuhe: Number(selected.mode || 0) === 2,
+      hasPreId: Boolean(preId),
+      amount,
+      httpStatus: response.status,
+      errno,
+      message: errorMessage,
+    });
 
     return {
       ok: response.ok && errno === 1,
@@ -383,10 +461,39 @@ export class MaiyatianClient {
       this.get<MaiyatianDeliveryOptionsResponse>(handSendUrl),
       this.get<MaiyatianDeliveryOptionsResponse>(orderPopupUrl),
     ]);
-    const successfulResponses = responses
-      .filter((result): result is PromiseFulfilledResult<MaiyatianDeliveryOptionsResponse> => result.status === "fulfilled")
-      .map((result) => result.value)
-      .filter((response) => Number(response.errno || 0) === 1);
+    const sourceNames = ["getHandSendInfo", "getOrderPopupInfo"] as const;
+    const successfulResponses: MaiyatianDeliveryOptionsResponse[] = [];
+    responses.forEach((result, index) => {
+      const source = sourceNames[index];
+      if (result.status === "rejected") {
+        logger.warn("delivery option source request failed", {
+          label: this.user.label,
+          sourceId: detailId,
+          source,
+          error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+        });
+        return;
+      }
+      const optionCount = Array.isArray(result.value.data?.logistic) ? result.value.data.logistic.length : 0;
+      if (Number(result.value.errno || 0) !== 1) {
+        logger.warn("delivery option source unavailable", {
+          label: this.user.label,
+          sourceId: detailId,
+          source,
+          errno: Number(result.value.errno || 0),
+          message: String(result.value.message || ""),
+          optionCount,
+        });
+        return;
+      }
+      logger.info("delivery option source loaded", {
+        label: this.user.label,
+        sourceId: detailId,
+        source,
+        optionCount,
+      });
+      successfulResponses.push(result.value);
+    });
     if (successfulResponses.length === 0) {
       const responseError = responses.find((result) => result.status === "fulfilled");
       const rejectedError = responses.find((result) => result.status === "rejected");
@@ -405,7 +512,15 @@ export class MaiyatianClient {
         if (key !== "::") mergedOptions.set(key, option);
       }
     }
-    return [...mergedOptions.values()].filter(isThirdPartyDeliveryOption);
+    const filteredOptions = [...mergedOptions.values()].filter(isThirdPartyDeliveryOption);
+    logger.info("delivery options merged", {
+      label: this.user.label,
+      sourceId: detailId,
+      mergedCount: mergedOptions.size,
+      candidateCount: filteredOptions.length,
+      candidateNames: filteredOptions.map((option) => String(option.name || option.tag || option.id || "")),
+    });
+    return filteredOptions;
   }
 
   private async fetchDeliveryQuote(detailId: string, option: MaiyatianLogisticOption) {
