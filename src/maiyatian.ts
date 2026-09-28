@@ -539,7 +539,13 @@ export class MaiyatianClient {
       servicePkg: String(option.service_pkg || ""),
       isJuhe: String(Number(option.mode || 0) === 2 ? 1 : 0),
     }).toString();
-    const response = await this.postForm(`${DELIVERY_PRICE_URL}&token=${encodeURIComponent(token)}`, body);
+    // Delivery providers are queried in parallel. A single slow provider must not
+    // keep the entire picker spinning until the account-wide HTTP timeout.
+    const response = await this.postForm(
+      `${DELIVERY_PRICE_URL}&token=${encodeURIComponent(token)}`,
+      body,
+      Math.min(this.config.httpTimeoutMs, 5_000),
+    );
     if (!response.ok) throw new Error(`Maiyatian price request failed with ${response.status}`);
     return await response.json() as MaiyatianDeliveryPriceResponse;
   }
@@ -849,9 +855,9 @@ export class MaiyatianClient {
     }
   }
 
-  private async postForm(pathname: string, body: string) {
+  private async postForm(pathname: string, body: string, timeoutMs = this.config.httpTimeoutMs) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.config.httpTimeoutMs);
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetch(new URL(pathname, BASE_URL), {
         method: "POST",
