@@ -301,6 +301,18 @@ export type SelfDeliveryCommand = {
   sourceId: string;
 };
 
+export type ThirdPartyDeliverySelection = {
+  logisticId: string;
+  logisticTag: string;
+  servicePkg?: string;
+};
+
+export type DeliveryOptionsCommand = {
+  sourceId: string;
+};
+
+export type DispatchDeliveryCommand = SelfDeliveryCommand & ThirdPartyDeliverySelection;
+
 export type PickupCompleteCommand = {
   platform: string;
   dailyPlatformSequence: number;

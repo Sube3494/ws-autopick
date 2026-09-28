@@ -5,7 +5,7 @@ import { logger } from "./logger.js";
 import { sendVerificationCode } from "./mailer.js";
 import { MaiyatianClient } from "./maiyatian.js";
 import { MainSystemClient } from "./main-system-client.js";
-import { AppConfig, AuthUser, CompleteDeliveryCommand, ConnectionUpdateInput, DashboardData, FailedEventFilters, FailedEventSummary, MealCompleteCommand, PickupCompleteCommand, RuntimeSettings, SelfDeliveryCommand } from "./types.js";
+import { AppConfig, AuthUser, CompleteDeliveryCommand, ConnectionUpdateInput, DashboardData, DeliveryOptionsCommand, DispatchDeliveryCommand, FailedEventFilters, FailedEventSummary, MealCompleteCommand, PickupCompleteCommand, RuntimeSettings, SelfDeliveryCommand } from "./types.js";
 import { UserRunner } from "./user-runner.js";
 
 const MAX_FAILED_EVENT_ATTEMPTS = 50;
@@ -242,6 +242,25 @@ export class PluginRuntime {
 
     const client = new MaiyatianClient(this.config, connection);
     return client.submitSelfDelivery(command);
+  }
+
+  async deliveryOptions(apiKey: string, command: DeliveryOptionsCommand) {
+    const connection = this.requireConnectionByApiKey(apiKey);
+    const client = new MaiyatianClient(this.config, connection);
+    return client.fetchDeliveryOptions(command);
+  }
+
+  async dispatchDelivery(apiKey: string, command: DispatchDeliveryCommand) {
+    const connection = this.requireConnectionByApiKey(apiKey);
+    const runner = this.runners.get(connection.id);
+    if (runner) {
+      const pickDone = await runner.waitForPickingComplete(command.orderNo, this.config.pickingWaitTimeoutMs);
+      if (!pickDone) {
+        return { ok: false, status: 409, parsed: null, text: "picking-not-completed", error: "picking-not-completed" };
+      }
+    }
+    const client = new MaiyatianClient(this.config, connection);
+    return client.submitThirdPartyDelivery(command);
   }
 
   async pickupComplete(apiKey: string, command: PickupCompleteCommand) {

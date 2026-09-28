@@ -1,8 +1,10 @@
-import { AppConfig, CompleteDeliveryCommand, DeliveryEvent, MainSystemOrderPayload, MaiyatianOrderDetail, MaiyatianOrderSummary, MaiyatianSessionIdentity, MealCompleteCommand, PickupCompleteCommand, SelfDeliveryCommand, UserConfig } from "./types.js";
+import { AppConfig, CompleteDeliveryCommand, DeliveryEvent, DeliveryOptionsCommand, DispatchDeliveryCommand, MainSystemOrderPayload, MaiyatianOrderDetail, MaiyatianOrderSummary, MaiyatianSessionIdentity, MealCompleteCommand, PickupCompleteCommand, SelfDeliveryCommand, UserConfig } from "./types.js";
 
 const BASE_URL = "https://saas.maiyatian.com";
 const WS_URL = "wss://msg.maiyatian.com/acc";
 const SELF_DELIVERY_SUBMIT_URL = "/delivery/submit/?f=json";
+const DELIVERY_OPTIONS_URL = "/delivery/getHandSendInfo/?f=json";
+const DELIVERY_PRICE_URL = "/delivery/price/?f=json";
 const COMPLETE_DELIVERY_TRACK_URL = "/delivery/track/?f=json&token=";
 const MEAL_COMPLETE_URL = "/order/mealComplete/?f=json";
 
@@ -16,6 +18,38 @@ type MaiyatianShopRecord = {
   address: string;
   cityCode?: string;
   cityName?: string;
+};
+
+type MaiyatianLogisticOption = {
+  id?: string | number;
+  tag?: string;
+  name?: string;
+  type?: string | number;
+  mode?: string | number;
+  service_pkg?: string;
+  disabled?: boolean;
+  is_delivery?: boolean;
+};
+
+type MaiyatianDeliveryOptionsResponse = {
+  errno?: number;
+  message?: string;
+  data?: {
+    logistic?: MaiyatianLogisticOption[];
+  };
+};
+
+type MaiyatianDeliveryPriceResponse = {
+  errno?: number;
+  message?: string;
+  data?: {
+    amount?: string | number;
+    fee?: string | number;
+    distance?: string | number;
+    weight?: string | number;
+    preId?: string;
+    estimated_delivery_time?: string | number;
+  };
 };
 
 export class MaiyatianClient {
@@ -204,6 +238,139 @@ export class MaiyatianClient {
         logisticTag: "oneself",
       },
     };
+  }
+
+  async fetchDeliveryOptions(command: DeliveryOptionsCommand) {
+    const detailId = String(command.sourceId || "").trim();
+    if (!detailId) throw new Error("sourceId is required");
+
+    const options = await this.loadThirdPartyDeliveryOptions(detailId);
+    const quotes = await Promise.all(options.map(async (option) => {
+      try {
+        const quote = await this.fetchDeliveryQuote(detailId, option);
+        if (Number(quote.errno || 0) !== 1 || !quote.data?.preId) {
+          return null;
+        }
+        const amountCents = normalizeDeliveryAmountCents(quote.data);
+        if (amountCents < 0) return null;
+        return {
+          logisticId: String(option.id || ""),
+          logisticTag: String(option.tag || ""),
+          name: String(option.name || option.tag || "配送服务"),
+          servicePkg: String(option.service_pkg || ""),
+          amount: amountCents,
+          distance: Number(quote.data.distance || 0),
+          estimatedDeliveryTime: Number(quote.data.estimated_delivery_time || 0),
+        };
+      } catch {
+        return null;
+      }
+    }));
+
+    return quotes
+      .filter((quote): quote is NonNullable<typeof quote> => Boolean(quote))
+      .sort((a, b) => a.amount - b.amount || a.name.localeCompare(b.name, "zh-CN"));
+  }
+
+  async submitThirdPartyDelivery(command: DispatchDeliveryCommand) {
+    const detailId = String(command.sourceId || "").trim();
+    if (!detailId) throw new Error("sourceId is required");
+
+    const options = await this.loadThirdPartyDeliveryOptions(detailId);
+    const selected = options.find((option) => (
+      String(option.id || "") === String(command.logisticId || "")
+      && String(option.tag || "") === String(command.logisticTag || "")
+      && String(option.service_pkg || "") === String(command.servicePkg || "")
+    ));
+    if (!selected) {
+      return { ok: false, status: 409, parsed: null, text: "delivery-option-not-found" };
+    }
+
+    const quote = await this.fetchDeliveryQuote(detailId, selected);
+    const amount = normalizeDeliveryAmountCents(quote.data);
+    const preId = String(quote.data?.preId || "").trim();
+    if (Number(quote.errno || 0) !== 1 || !preId || amount < 0) {
+      return { ok: false, status: 409, parsed: quote as unknown as Record<string, unknown>, text: String(quote.message || "delivery-quote-failed") };
+    }
+
+    const body = new URLSearchParams({
+      id: detailId,
+      dispatcherId: "0",
+      logisticId: String(selected.id || ""),
+      logisticTag: String(selected.tag || ""),
+      tip: "0",
+      weight: "0",
+      preId,
+      remark: "",
+      amount: String(amount),
+      deliveryTime: "0",
+      direct: "0",
+      insure: "0",
+      special: "0",
+      priority: "0",
+      car: "0",
+      traffic: "0",
+      trafficWay: "",
+      cake: "0",
+      servicePkg: String(selected.service_pkg || ""),
+      mealType: "0",
+      fromDoor: "0",
+      toDoor: "0",
+      doorService: "0",
+    }).toString();
+
+    const response = await this.postForm(SELF_DELIVERY_SUBMIT_URL, body);
+    const text = await response.text();
+    let parsed: Record<string, unknown> | null = null;
+    try {
+      parsed = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      parsed = null;
+    }
+
+    return {
+      ok: response.ok && Number(parsed?.errno || 0) === 1,
+      status: response.ok ? (Number(parsed?.errno || 0) === 1 ? 200 : 409) : response.status,
+      parsed,
+      text,
+      delivery: {
+        logisticId: String(selected.id || ""),
+        logisticTag: String(selected.tag || ""),
+        logisticName: String(selected.name || selected.tag || "配送服务"),
+        servicePkg: String(selected.service_pkg || ""),
+        sendFee: amount,
+      },
+    };
+  }
+
+  private async loadThirdPartyDeliveryOptions(detailId: string) {
+    const token = this.requireToken();
+    const url = new URL(DELIVERY_OPTIONS_URL, BASE_URL);
+    url.searchParams.set("token", token);
+    url.searchParams.set("id", detailId);
+    const response = await this.get<MaiyatianDeliveryOptionsResponse>(url);
+    if (Number(response.errno || 0) !== 1) {
+      throw new Error(response.message || "Failed to load delivery options");
+    }
+    return (Array.isArray(response.data?.logistic) ? response.data.logistic : []).filter(isThirdPartyDeliveryOption);
+  }
+
+  private async fetchDeliveryQuote(detailId: string, option: MaiyatianLogisticOption) {
+    const token = this.requireToken();
+    const body = new URLSearchParams({
+      id: detailId,
+      logisticId: String(option.id || ""),
+      logisticTag: String(option.tag || ""),
+      tip: "0",
+      weight: "0",
+      deliveryTime: "0",
+      trafficWay: "",
+      servicePkg: String(option.service_pkg || ""),
+      isJuhe: String(Number(option.mode || 0) === 2 ? 1 : 0),
+    }).toString();
+    const response = await this.postForm(`${DELIVERY_PRICE_URL}&token=${encodeURIComponent(token)}`, body);
+    if (!response.ok) throw new Error(`Maiyatian price request failed with ${response.status}`);
+    return await response.json() as MaiyatianDeliveryPriceResponse;
   }
 
   async submitPickupComplete(command: PickupCompleteCommand) {
@@ -530,6 +697,22 @@ export class MaiyatianClient {
       clearTimeout(timeout);
     }
   }
+}
+
+function isThirdPartyDeliveryOption(option: MaiyatianLogisticOption) {
+  const id = String(option.id || "").trim();
+  const tag = String(option.tag || "").trim().toLowerCase();
+  return Boolean(id)
+    && !["oneself", "other", "picker", "rider"].includes(tag)
+    && option.disabled !== true
+    && option.is_delivery !== true;
+}
+
+function normalizeDeliveryAmountCents(data?: MaiyatianDeliveryPriceResponse["data"]) {
+  const fee = Number(data?.fee);
+  if (Number.isFinite(fee) && fee >= 0) return Math.round(fee);
+  const amount = Number(data?.amount);
+  return Number.isFinite(amount) && amount >= 0 ? Math.round(amount * 100) : -1;
 }
 
 function matchFirst(input: string, pattern: RegExp) {

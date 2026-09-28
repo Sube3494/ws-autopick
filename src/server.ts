@@ -425,6 +425,64 @@ export function createServer(runtime: PluginRuntime) {
         return;
       }
 
+      if ((url.pathname === "/delivery-options" || url.pathname === "/dispatch-delivery") && method === "POST") {
+        const apiKey = readApiKey(request.headers);
+        if (!runtime.isAuthorized(apiKey)) {
+          response.writeHead(401, { "Content-Type": "application/json" });
+          response.end(JSON.stringify({ ok: false, error: "Unauthorized" }));
+          return;
+        }
+
+        const rawBody = await readRequestBody(request);
+        let body: Record<string, unknown>;
+        try {
+          body = rawBody ? JSON.parse(rawBody) as Record<string, unknown> : {};
+        } catch {
+          response.writeHead(400, { "Content-Type": "application/json" });
+          response.end(JSON.stringify({ ok: false, error: "Invalid JSON body" }));
+          return;
+        }
+
+        const sourceId = String(body.sourceId || "").trim();
+        if (!sourceId) {
+          response.writeHead(400, { "Content-Type": "application/json" });
+          response.end(JSON.stringify({ ok: false, error: "sourceId is required" }));
+          return;
+        }
+
+        if (url.pathname === "/delivery-options") {
+          const options = await runtime.deliveryOptions(apiKey || "", { sourceId });
+          response.writeHead(200, { "Content-Type": "application/json" });
+          response.end(JSON.stringify({ ok: true, options }));
+          return;
+        }
+
+        const orderNo = String(body.orderNo || "").trim();
+        const platform = String(body.platform || "").trim();
+        const dailyPlatformSequence = Number(body.dailyPlatformSequence || 0);
+        const logisticId = String(body.logisticId || "").trim();
+        const logisticTag = String(body.logisticTag || "").trim();
+        const servicePkg = String(body.servicePkg || "").trim();
+        if (!orderNo || !platform || !Number.isFinite(dailyPlatformSequence) || dailyPlatformSequence <= 0 || !logisticId || !logisticTag) {
+          response.writeHead(400, { "Content-Type": "application/json" });
+          response.end(JSON.stringify({ ok: false, error: "platform, dailyPlatformSequence, orderNo, sourceId, logisticId and logisticTag are required" }));
+          return;
+        }
+
+        const payload = await runtime.dispatchDelivery(apiKey || "", {
+          platform,
+          dailyPlatformSequence,
+          orderNo,
+          sourceId,
+          logisticId,
+          logisticTag,
+          servicePkg,
+        });
+        response.writeHead(payload.ok ? 200 : (payload.status || 409), { "Content-Type": "application/json" });
+        response.end(JSON.stringify(payload));
+        return;
+      }
+
       if ((url.pathname === "/pickup-complete" || url.pathname === "/meal-complete" || url.pathname === "/complete-delivery") && method === "POST") {
         const apiKey = readApiKey(request.headers);
         if (!runtime.isAuthorized(apiKey)) {
