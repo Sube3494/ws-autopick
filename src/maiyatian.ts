@@ -4,6 +4,7 @@ const BASE_URL = "https://saas.maiyatian.com";
 const WS_URL = "wss://msg.maiyatian.com/acc";
 const SELF_DELIVERY_SUBMIT_URL = "/delivery/submit/?f=json";
 const DELIVERY_OPTIONS_URL = "/delivery/getHandSendInfo/?f=json";
+const DELIVERY_ORDER_POPUP_URL = "/order/getOrderPopupInfo/?f=json&scene=hand";
 const DELIVERY_PRICE_URL = "/delivery/price/?f=json";
 const COMPLETE_DELIVERY_TRACK_URL = "/delivery/track/?f=json&token=";
 const MEAL_COMPLETE_URL = "/order/mealComplete/?f=json";
@@ -372,14 +373,39 @@ export class MaiyatianClient {
 
   private async loadThirdPartyDeliveryOptions(detailId: string) {
     const token = this.requireToken();
-    const url = new URL(DELIVERY_OPTIONS_URL, BASE_URL);
-    url.searchParams.set("token", token);
-    url.searchParams.set("id", detailId);
-    const response = await this.get<MaiyatianDeliveryOptionsResponse>(url);
-    if (Number(response.errno || 0) !== 1) {
-      throw new Error(response.message || "Failed to load delivery options");
+    const handSendUrl = new URL(DELIVERY_OPTIONS_URL, BASE_URL);
+    handSendUrl.searchParams.set("token", token);
+    handSendUrl.searchParams.set("id", detailId);
+    const orderPopupUrl = new URL(DELIVERY_ORDER_POPUP_URL, BASE_URL);
+    orderPopupUrl.searchParams.set("order_id", detailId);
+
+    const responses = await Promise.allSettled([
+      this.get<MaiyatianDeliveryOptionsResponse>(handSendUrl),
+      this.get<MaiyatianDeliveryOptionsResponse>(orderPopupUrl),
+    ]);
+    const successfulResponses = responses
+      .filter((result): result is PromiseFulfilledResult<MaiyatianDeliveryOptionsResponse> => result.status === "fulfilled")
+      .map((result) => result.value)
+      .filter((response) => Number(response.errno || 0) === 1);
+    if (successfulResponses.length === 0) {
+      const responseError = responses.find((result) => result.status === "fulfilled");
+      const rejectedError = responses.find((result) => result.status === "rejected");
+      throw new Error(
+        (responseError?.status === "fulfilled" ? responseError.value.message : "")
+        || (rejectedError?.status === "rejected" && rejectedError.reason instanceof Error ? rejectedError.reason.message : "")
+        || "Failed to load delivery options",
+      );
     }
-    return (Array.isArray(response.data?.logistic) ? response.data.logistic : []).filter(isThirdPartyDeliveryOption);
+
+    const mergedOptions = new Map<string, MaiyatianLogisticOption>();
+    for (const response of successfulResponses) {
+      const options = Array.isArray(response.data?.logistic) ? response.data.logistic : [];
+      for (const option of options) {
+        const key = [option.id, option.tag, option.service_pkg].map((value) => String(value || "").trim()).join(":");
+        if (key !== "::") mergedOptions.set(key, option);
+      }
+    }
+    return [...mergedOptions.values()].filter(isThirdPartyDeliveryOption);
   }
 
   private async fetchDeliveryQuote(detailId: string, option: MaiyatianLogisticOption) {
