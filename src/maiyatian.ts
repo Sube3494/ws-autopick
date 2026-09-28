@@ -38,7 +38,10 @@ type DeliveryTransport = "rider" | "car" | "freight";
 
 function getOfficialDeliveryCategory(option: MaiyatianLogisticOption): DeliveryCategory {
   const name = String(option.name || "").trim().toLowerCase();
+  const tag = String(option.tag || "").trim().toLowerCase();
   const servicePkg = String(option.service_pkg || "").trim().toLowerCase();
+  // 麦芽田将美团「直送」和「1对1急送」作为两个产品：前者仍是拼单，后者才是专人。
+  if (tag === "mtzb" && servicePkg === "direct") return "shared";
   return servicePkg.includes("direct") || /直送|直达|1对1|一对一|专人|专送|独享/.test(name)
     ? "direct"
     : "shared";
