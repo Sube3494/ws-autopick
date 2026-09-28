@@ -27,26 +27,27 @@ type MaiyatianLogisticOption = {
   type?: string | number;
   mode?: string | number;
   service_pkg?: string;
-  is_direct?: string | number | boolean;
-  extra?: {
-    is_direct?: string | number | boolean;
-  } | null;
   disabled?: boolean;
   is_delivery?: boolean;
 };
 
-type DeliveryCategory = "direct" | "shared" | "standard";
+type DeliveryCategory = "direct" | "shared";
+type DeliveryTransport = "rider" | "car" | "freight";
 
 function getOfficialDeliveryCategory(option: MaiyatianLogisticOption): DeliveryCategory {
-  const directFlag = option.extra?.is_direct ?? option.is_direct;
-  if (directFlag === true || directFlag === 1 || String(directFlag ?? "").trim() === "1") {
-    return "direct";
-  }
-
+  const name = String(option.name || "").trim().toLowerCase();
   const servicePkg = String(option.service_pkg || "").trim().toLowerCase();
-  if (servicePkg.includes("pinsong")) return "shared";
-  if (servicePkg.includes("direct")) return "direct";
-  return "standard";
+  return servicePkg.includes("direct") || /直送|直达|1对1|一对一|专人|专送|独享/.test(name)
+    ? "direct"
+    : "shared";
+}
+
+function getOfficialDeliveryTransport(option: MaiyatianLogisticOption): DeliveryTransport {
+  const name = String(option.name || "").trim().toLowerCase();
+  const servicePkg = String(option.service_pkg || "").trim().toLowerCase();
+  if (name.includes("货运")) return "freight";
+  if (servicePkg === "car" || name.includes("汽车")) return "car";
+  return "rider";
 }
 
 type MaiyatianDeliveryOptionsResponse = {
@@ -278,6 +279,7 @@ export class MaiyatianClient {
           name: String(option.name || option.tag || "配送服务"),
           servicePkg: String(option.service_pkg || ""),
           category: getOfficialDeliveryCategory(option),
+          transport: getOfficialDeliveryTransport(option),
           amount: amountCents,
           distance: Number(quote.data.distance || 0),
           estimatedDeliveryTime: Number(quote.data.estimated_delivery_time || 0),
