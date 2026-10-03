@@ -119,14 +119,32 @@ export class UserRunner {
   }
 
   private async process(event: DeliveryEvent) {
+    const isOfflineLike = event.kind === "upsert" && (
+      isOfflineLikePlatform(event.platform)
+      || String(event.payload.channelTag || "").trim().toLowerCase() === "other"
+      || Boolean(event.payload.delivery)
+    );
+
     if (event.kind === "upsert" && (!Array.isArray(event.payload.items) || event.payload.items.length === 0)) {
-      logger.warn("skip invalid upsert event without items", {
-        label: this.user.label,
-        orderNo: event.orderNo,
-        platform: event.platform,
-      });
-      return;
+      if (isOfflineLike) {
+        // 对于线下交易/手工发单/跑腿订单，若无商品明细则补充手工配送占位商品，确保能推送到主系统入库
+        event.payload.items = [
+          {
+            productName: "手工配送占位商品",
+            productNo: "__manual_delivery_placeholder__",
+            quantity: 1,
+          },
+        ];
+      } else {
+        logger.warn("skip invalid upsert event without items", {
+          label: this.user.label,
+          orderNo: event.orderNo,
+          platform: event.platform,
+        });
+        return;
+      }
     }
+
 
     const dedupeKey = `${event.sourceLabel}:${event.eventId}`;
     if (this.dedupe.has(dedupeKey)) {
@@ -235,15 +253,15 @@ export class UserRunner {
 
   private buildProgressEvent(platformLabel: string, orderLabel: string, rawPayload: unknown): DeliveryEvent | null {
     for (const [orderId, identity] of this.orderIdentityByOrderId.entries()) {
-      const { platform, orderNo } = identity;
-      if (platformLabel.includes(normalizePlatformLabel(platform)) && matchOrderLabel(orderNo, orderLabel)) {
+      const { platform } = identity;
+      if (isPlatformMatched(platform, platformLabel) && matchOrderIdentity(identity, orderLabel)) {
         return {
           kind: "progress",
           sourceLabel: this.user.label,
           apiKey: this.user.apiKey,
           eventId: `${this.user.label}:${orderId}:progress:pickCompleted`,
           platform,
-          orderNo,
+          orderNo: identity.orderNo,
           sourceId: identity.sourceId || orderId,
           dailyPlatformSequence: identity.dailyPlatformSequence,
           deliveryId: identity.deliveryId,
@@ -255,7 +273,25 @@ export class UserRunner {
         };
       }
     }
-    return null;
+
+    // 兜底推送：若本地内存尚未缓存具体订单，直接使用识别到的平台别名和流水号构造进度推给主系统，
+    // 主系统会通过数据库内 platformAliases 与 dailyPlatformSequence 精准定位该订单并更新
+    const resolvedPlatform = normalizePlatformKey(platformLabel) || platformLabel;
+    const seqNum = Number(orderLabel);
+    return {
+      kind: "progress",
+      sourceLabel: this.user.label,
+      apiKey: this.user.apiKey,
+      eventId: `${this.user.label}:progress:broadcast:${resolvedPlatform}:${orderLabel}`,
+      platform: resolvedPlatform,
+      orderNo: `#${orderLabel}`,
+      dailyPlatformSequence: Number.isFinite(seqNum) && seqNum > 0 ? seqNum : undefined,
+      progress: {
+        pickCompleted: true,
+        statusHint: "meal",
+      },
+      rawPayload,
+    };
   }
 
   private buildStatusProgressEvent(orderId: string, statusHint: string, rawPayload: unknown): DeliveryEvent | null {
@@ -443,17 +479,63 @@ export class UserRunner {
   }
 }
 
-function normalizePlatformLabel(platform: string) {
-  if (platform.includes("美团")) return "美团";
-  if (platform.includes("京东")) return "京东";
-  if (platform.includes("淘宝")) return "淘宝";
-  return platform.trim();
+function normalizePlatformKey(name: string) {
+  const text = String(name || "").trim().toLowerCase();
+  if (["其他", "其它", "other", "线下", "offline", "线下交易"].includes(text) || text.includes("线下")) {
+    return "线下交易";
+  }
+  if (text.includes("美团") || text.includes("meituan") || text.includes("shangou")) return "美团";
+  if (text.includes("京东") || text.includes("jd") || text.includes("daojia")) return "京东";
+  if (text.includes("淘宝") || text.includes("taobao") || text.includes("ebai")) return "淘宝";
+  if (text.includes("饿了么") || text.includes("eleme")) return "饿了么";
+  return name.trim();
 }
 
-function matchOrderLabel(orderNo: string, orderLabel: string) {
-  const normalized = String(orderNo || "").trim();
-  return normalized.endsWith(orderLabel);
+function isPlatformMatched(candidatePlatform: string, platformLabel: string) {
+  const normCandidate = normalizePlatformKey(candidatePlatform);
+  const normLabel = normalizePlatformKey(platformLabel);
+  if (normCandidate === normLabel) return true;
+  if (normCandidate && normLabel && (normCandidate.includes(normLabel) || normLabel.includes(normCandidate))) return true;
+  return false;
 }
+
+function isOfflineLikePlatform(platform?: string) {
+  return normalizePlatformKey(String(platform || "")) === "线下交易";
+}
+
+function matchOrderIdentity(
+  identity: { orderNo?: string; dailyPlatformSequence?: number },
+  orderLabel: string
+) {
+  const label = String(orderLabel || "").trim();
+  if (!label) return false;
+
+  // 1. 匹配序号 / 流水号 (例如 "1号" 对应 dailyPlatformSequence = 1)
+  if (identity.dailyPlatformSequence != null && String(identity.dailyPlatformSequence) === label) {
+    return true;
+  }
+
+  const orderNo = String(identity.orderNo || "").trim();
+  if (!orderNo) return false;
+
+  // 2. 匹配以序号结尾 (例如 "#1", "20261003-1")
+  if (orderNo.endsWith(label)) {
+    return true;
+  }
+
+  // 3. 匹配去除非数字后的序号或完全相等
+  const pureDigits = orderNo.replace(/\D/g, "");
+  if (pureDigits === label || pureDigits.endsWith(label)) {
+    return true;
+  }
+
+  if (orderNo === `#${label}` || orderNo.includes(`${label}号`)) {
+    return true;
+  }
+
+  return false;
+}
+
 
 function isAlreadyPickedLikeStatus(status?: string) {
   const text = String(status || "").trim();

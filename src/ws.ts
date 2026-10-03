@@ -293,15 +293,26 @@ function normalizeNotifyStatusHint(value: unknown) {
 
 function parseProgressText(text: string): WsNotifyEvent | null {
   if (!text) return null;
-  const match = text.match(/^(.+?)(\d+)号订单上报拣货成功$/);
+  const trimmed = text.trim();
+  const match = trimmed.match(/^(.+?)\s*#?\s*(\d+)\s*号(?:订单)?(.*)$/);
   if (!match) {
     return null;
   }
 
-  return {
-    kind: "progress",
-    platformLabel: match[1].trim(),
-    orderLabel: match[2].trim(),
-    raw: text,
-  };
+  const platformLabel = match[1].trim();
+  const orderLabel = match[2].trim();
+  const suffix = match[3].trim();
+
+  // 匹配常见的麦芽田出餐、拣货、备货广播，无后缀或包含拣货相关词汇时均视为拣货成功进度
+  if (!suffix || /上报拣货成功|已拣货|拣货完成|出餐完成|餐品已完成|商品已备好|商品备货完成/.test(suffix)) {
+    return {
+      kind: "progress",
+      platformLabel,
+      orderLabel,
+      raw: text,
+    };
+  }
+
+  return null;
 }
+
